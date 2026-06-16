@@ -45,6 +45,7 @@ export type Job = {
   postedAt: string; // ISO date string
   isSaved?: boolean;
   isNew?: boolean;
+  applyUrl: String;
 };
 
 export type User = {

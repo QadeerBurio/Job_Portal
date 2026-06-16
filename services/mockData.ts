@@ -18,6 +18,7 @@ export const MOCK_JOBS: Job[] = [
     category: "AI/ML",
     isInternship: false,
     isTrainee: true,
+    applyUrl: "https://www.google.com",
     description:
       "Join our AI team and learn to craft, evaluate and optimize prompts for LLM-powered products.",
     requirements: [
@@ -47,6 +48,7 @@ export const MOCK_JOBS: Job[] = [
     category: "AI/ML",
     isInternship: false,
     isTrainee: false,
+    applyUrl: "https://www.google.com",
     description:
       "Build and deploy production ML pipelines for enterprise clients.",
     requirements: ["3+ years ML", "PyTorch/TensorFlow", "MLOps experience"],
@@ -73,6 +75,7 @@ export const MOCK_JOBS: Job[] = [
     category: "Software",
     isInternship: true,
     isTrainee: false,
+    applyUrl: "https://www.google.com",
     description:
       "3-month paid internship learning manual and automated testing on fintech products.",
     requirements: ["CS student or fresh grad", "Basic programming"],
@@ -98,6 +101,7 @@ export const MOCK_JOBS: Job[] = [
     category: "Software",
     isInternship: true,
     isTrainee: false,
+    applyUrl: "https://www.google.com",
     description:
       "Remote QA internship for a SaaS product team. Flexible hours.",
     requirements: ["Attention to detail", "Can work remotely"],
@@ -124,6 +128,7 @@ export const MOCK_JOBS: Job[] = [
     category: "Design",
     isInternship: true,
     isTrainee: false,
+    applyUrl: "https://www.google.com",
     description:
       "Work alongside senior designers on mobile and web products for global clients.",
     requirements: ["Figma proficiency", "Portfolio of student projects"],
@@ -152,6 +157,7 @@ export const MOCK_JOBS: Job[] = [
     category: "Marketing",
     isInternship: true,
     isTrainee: false,
+    applyUrl: "https://www.google.com",
     description:
       "Support the PR team in managing media relationships and influencer campaigns.",
     requirements: [
@@ -180,6 +186,7 @@ export const MOCK_JOBS: Job[] = [
     category: "Marketing",
     isInternship: true,
     isTrainee: false,
+    applyUrl: "https://www.google.com",
     description:
       "Part-time creative writing role. Craft compelling copy for digital campaigns.",
     requirements: ["Strong Urdu & English writing", "Creative portfolio"],
@@ -205,6 +212,7 @@ export const MOCK_JOBS: Job[] = [
     category: "Marketing",
     isInternship: true,
     isTrainee: false,
+    applyUrl: "https://www.google.com",
     description:
       "Analyze funnel data and run A/B tests to optimize digital growth channels.",
     requirements: [
@@ -235,6 +243,7 @@ export const MOCK_JOBS: Job[] = [
     category: "Operations",
     isInternship: true,
     isTrainee: false,
+    applyUrl: "https://www.google.com",
     description:
       "Learn end-to-end e-commerce operations from order management to last-mile delivery.",
     requirements: ["Supply chain or business student", "MS Excel"],
@@ -261,6 +270,7 @@ export const MOCK_JOBS: Job[] = [
     category: "Software",
     isInternship: true,
     isTrainee: false,
+    applyUrl: "https://www.google.com",
     description:
       "Remote internship building REST APIs and React dashboards for real products.",
     requirements: ["JavaScript basics", "HTML/CSS", "Git"],
@@ -286,6 +296,7 @@ export const MOCK_JOBS: Job[] = [
     category: "Software",
     isInternship: true,
     isTrainee: false,
+    applyUrl: "https://www.google.com",
     description: "Build cross-platform mobile features under senior guidance.",
     requirements: ["Dart or React Native basics", "Mobile UI understanding"],
     responsibilities: [
@@ -309,6 +320,7 @@ export const MOCK_JOBS: Job[] = [
     category: "Software",
     isInternship: false,
     isTrainee: false,
+    applyUrl: "https://www.google.com",
     description:
       "Consult and build full-stack solutions for enterprise clients across MENA.",
     requirements: [
@@ -339,6 +351,7 @@ export const MOCK_JOBS: Job[] = [
     category: "Finance",
     isInternship: false,
     isTrainee: true,
+    applyUrl: "https://www.google.com",
     description:
       "Structured trainee program in client account management at Pakistan's largest bank.",
     requirements: ["BBA/MBA", "Strong communication", "MS Office"],
@@ -359,6 +372,7 @@ export const MOCK_JOBS: Job[] = [
     category: "Management",
     isInternship: false,
     isTrainee: true,
+    applyUrl: "https://www.google.com",
     description:
       "12-month structured MTP rotating across Operations, Marketing and Tech at Daraz.",
     requirements: ["MBA or top-tier BBA", "Leadership skills", "CGPA 3.5+"],
@@ -385,6 +399,7 @@ export const MOCK_JOBS: Job[] = [
     category: "Clinical Research",
     isInternship: true,
     isTrainee: false,
+    applyUrl: "https://www.google.com",
     description:
       "Assist CRAs in monitoring clinical trials per GCP guidelines.",
     requirements: ["Pharm-D or MBBS student", "GCP awareness"],
@@ -409,6 +424,7 @@ export const MOCK_JOBS: Job[] = [
     category: "Pharmacy",
     isInternship: false,
     isTrainee: true,
+    applyUrl: "https://www.google.com",
     description:
       "Rotational trainee across manufacturing, QA and regulatory departments.",
     requirements: ["Pharm-D", "Production lab experience preferred"],
@@ -435,6 +451,7 @@ export const MOCK_JOBS: Job[] = [
     category: "Architecture",
     isInternship: false,
     isTrainee: false,
+    applyUrl: "https://www.google.com",
     description:
       "Produce detailed architectural drawings and 3D models for large-scale projects.",
     requirements: [
@@ -463,6 +480,7 @@ export const MOCK_JOBS: Job[] = [
     category: "Urban Planning",
     isInternship: false,
     isTrainee: false,
+    applyUrl: "https://www.google.com",
     description:
       "Contribute to urban development plans and zoning policies for Karachi.",
     requirements: ["Urban Planning degree", "GIS software", "Policy research"],

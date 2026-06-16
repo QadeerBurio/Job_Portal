@@ -9,116 +9,132 @@
 //   npm install express mongoose cors dotenv
 //   node server.js
 // ─────────────────────────────────────────────────────────────────────────────
+// backend/server.js
 require("dotenv").config();
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
 
+if (!process.env.MONGODB_URI) {
+  console.error("❌ MONGODB_URI missing from .env");
+  process.exit(1);
+}
+
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-console.log("MONGODB_URI:", process.env.MONGODB_URI);
-
-// ── Connect to MongoDB Atlas ──────────────────────────────────────────────────
 mongoose
   .connect(process.env.MONGODB_URI)
   .then(() => console.log("✅ MongoDB Atlas connected"))
   .catch((err) => {
-    console.error("❌ MongoDB error:", err);
+    console.error("❌ MongoDB error:", err.message);
     process.exit(1);
   });
 
-// ── Job Schema (matches your JSON fields exactly) ─────────────────────────────
-const jobSchema = new mongoose.Schema(
+// ── Schema — strict:false so ANY field in your document is returned ───────────
+// This is the key fix: strict:false means documents that don't have
+// isActive / salaryMin / jobType etc. still get returned correctly.
+const jobSchema = new mongoose.Schema({}, { strict: false, timestamps: true });
+
+// Text index for search (run once, Atlas creates it automatically)
+jobSchema.index(
   {
-    title: { type: String, required: true },
-    company: { type: String, required: true },
-    companyUrl: String,
-    applyUrl: String,
-    location: { type: String, default: "Karachi" },
-    area: { type: String, default: "Karachi" },
-    salaryMin: { type: Number, default: 30 }, // in thousands PKR
-    salaryMax: { type: Number, default: 80 },
-    jobType: {
-      type: String,
-      enum: [
-        "Full-time",
-        "Part-time",
-        "Contract",
-        "Internship",
-        "Remote",
-        "On-site",
-        "Hybrid",
-        "Trainee",
-      ],
-      default: "Full-time",
-    },
-    category: { type: String, default: "Other" },
-    isInternship: { type: Boolean, default: false },
-    isTrainee: { type: Boolean, default: false },
-    description: String,
-    requirements: [String],
-    responsibilities: [String],
-    tags: [String],
-    experience: String,
-    isRemote: { type: Boolean, default: false },
-    easyApply: { type: Boolean, default: false },
-    postedAt: { type: Date, default: Date.now },
-    expiresAt: Date,
-    //isActive: { type: Boolean, default: true },
-    views: { type: Number, default: 0 },
-    applications: { type: Number, default: 0 },
-    source: String,
+    title: "text",
+    description: "text",
+    company_name: "text",
+    company: "text",
+    skills: "text",
   },
-  { timestamps: true },
+  { default_language: "english" },
 );
 
-// Text index for full-text search
-jobSchema.index({
-  title: "text",
-  description: "text",
-  tags: "text",
-  company: "text",
+const Job = mongoose.model("Job", jobSchema, "jobs"); // "jobs" = exact collection name
+
+// ── Debug endpoint — call this first to confirm data exists ──────────────────
+app.get("/api/debug", async (req, res) => {
+  try {
+    const total = await Job.countDocuments({});
+    const sample = await Job.findOne({}).lean();
+    const fields = sample ? Object.keys(sample) : [];
+    res.json({
+      totalDocuments: total,
+      sampleFields: fields,
+      sampleTitle: sample?.title ?? sample?.Title ?? "no title field found",
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
-// Compound index for filters
-jobSchema.index({ jobType: 1, category: 1, postedAt: -1 });
-jobSchema.index({ isInternship: 1, isActive: 1 });
 
-const Job = mongoose.model("Job", jobSchema);
-
-// ── GET /api/jobs — list with search + filters + pagination ───────────────────
+// ── GET /api/jobs ─────────────────────────────────────────────────────────────
 app.get("/api/jobs", async (req, res) => {
   try {
     const {
-      q, // text search
-      jobType, // comma-separated: "Internship,Remote"
+      q,
+      jobType,
       category,
       isInternship,
-      isTrainee,
       salaryMin,
       area,
-      sortBy, // "Latest" | "Salary"
+      sortBy,
       page = 1,
       limit = 20,
     } = req.query;
 
-    const filter = { isActive: true };
+    // ✅ NO isActive filter — works even if your docs don't have that field
+    const filter = {};
 
-    // Full-text search
-    if (q) filter.$text = { $search: q };
+    if (q) {
+      // Try text search first; fall back to regex if no text index yet
+      filter.$or = [
+        { title: { $regex: q, $options: "i" } },
+        { company: { $regex: q, $options: "i" } },
+        { company_name: { $regex: q, $options: "i" } },
+        { skills: { $regex: q, $options: "i" } },
+        { description: { $regex: q, $options: "i" } },
+      ];
+    }
 
-    // Filters
-    if (jobType) filter.jobType = { $in: jobType.split(",") };
+    // jobType filter — handle both field names
+    if (jobType) {
+      const types = jobType.split(",");
+      filter.$or = [
+        ...(filter.$or ?? []),
+        { jobType: { $in: types } },
+        { job_type: { $in: types } },
+      ];
+    }
+
     if (category) filter.category = category;
-    if (isInternship !== undefined)
-      filter.isInternship = isInternship === "true";
-    if (isTrainee !== undefined) filter.isTrainee = isTrainee === "true";
-    if (area) filter.area = { $regex: area, $options: "i" };
-    if (salaryMin) filter.salaryMax = { $gte: Number(salaryMin) };
+    if (area)
+      filter.$or = [
+        ...(filter.$or ?? []),
+        { area: { $regex: area, $options: "i" } },
+        { location: { $regex: area, $options: "i" } },
+      ];
 
-    // Sort
-    const sort = sortBy === "Salary" ? { salaryMax: -1 } : { postedAt: -1 };
+    if (isInternship === "true")
+      filter.$or = [
+        ...(filter.$or ?? []),
+        { isInternship: true },
+        { job_type: { $regex: /intern/i } },
+      ];
+
+    // Salary filter — handle both raw PKR and thousands
+    if (salaryMin) {
+      const minVal = Number(salaryMin);
+      filter.$or = [
+        ...(filter.$or ?? []),
+        { salaryMax: { $gte: minVal } },
+        { salary_maximum: { $gte: minVal > 1000 ? minVal : minVal * 1000 } },
+      ];
+    }
+
+    const sort =
+      sortBy === "Salary"
+        ? { salary_maximum: -1, salaryMax: -1 }
+        : { createdAt: -1, postedAt: -1, _id: -1 };
 
     const jobs = await Job.find(filter)
       .sort(sort)
@@ -126,12 +142,15 @@ app.get("/api/jobs", async (req, res) => {
       .skip((Number(page) - 1) * Number(limit))
       .lean();
 
-    console.log("JOBS FOUND:", jobs.length);
     const total = await Job.countDocuments(filter);
+
+    console.log(
+      `GET /api/jobs — filter: ${JSON.stringify(filter)} — found: ${jobs.length}`,
+    );
 
     res.json({ data: jobs, total, page: Number(page) });
   } catch (err) {
-    console.error(err);
+    console.error("GET /api/jobs error:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -139,10 +158,11 @@ app.get("/api/jobs", async (req, res) => {
 // ── GET /api/jobs/recommended ─────────────────────────────────────────────────
 app.get("/api/jobs/recommended", async (req, res) => {
   try {
-    const jobs = await Job.find({ isActive: true })
-      .sort({ postedAt: -1 })
+    const jobs = await Job.find({})
+      .sort({ createdAt: -1, _id: -1 })
       .limit(6)
       .lean();
+    console.log(`GET /api/jobs/recommended — found: ${jobs.length}`);
     res.json(jobs);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -151,12 +171,9 @@ app.get("/api/jobs/recommended", async (req, res) => {
 
 // ── GET /api/jobs/:id ─────────────────────────────────────────────────────────
 app.get("/api/jobs/:id", async (req, res) => {
-  console.log("QUERY:", req.query);
   try {
     const job = await Job.findById(req.params.id).lean();
     if (!job) return res.status(404).json({ error: "Job not found" });
-    // Increment view count
-    Job.findByIdAndUpdate(req.params.id, { $inc: { views: 1 } }).exec();
     res.json(job);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -164,9 +181,10 @@ app.get("/api/jobs/:id", async (req, res) => {
 });
 
 // ── Health check ──────────────────────────────────────────────────────────────
-app.get("/api/health", (_, res) => res.json({ status: "ok" }));
+app.get("/api/health", async (_, res) => {
+  const count = await Job.countDocuments({}).catch(() => -1);
+  res.json({ status: "ok", totalJobs: count });
+});
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () =>
-  console.log(`🚀 Server running on http://localhost:${PORT}`),
-);
+app.listen(PORT, () => console.log(`🚀 Server on http://localhost:${PORT}`));

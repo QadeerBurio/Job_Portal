@@ -1,19 +1,26 @@
-// app/filter.tsx  — Filter & Sort Sheet
+// app/filter.tsx
+// Renders as a modal Stack screen — ThemeProvider is in root _layout.tsx
+// so useTheme() works here without any extra wrapper.
 import { router } from "expo-router";
 import React, { useState } from "react";
 import {
-    SafeAreaView,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "../context/ThemeContext";
-import { JobType } from "../types";
+import { FilterState, JobType } from "../types";
 
-const SORT_OPTIONS = ["Latest Jobs", "Relevant", "Salary (High to Low)"];
+const SORT_OPTIONS: { key: FilterState["sortBy"]; label: string }[] = [
+  { key: "Latest", label: "Latest Jobs" },
+  { key: "Relevant", label: "Relevant" },
+  { key: "Salary", label: "Salary (High to Low)" },
+];
+
 const AREAS = [
   "Clifton",
   "DHA",
@@ -21,77 +28,83 @@ const AREAS = [
   "Korangi",
   "PECHS",
   "North Nazimabad",
+  "Saddar",
+  "I.I. Chundrigar",
 ];
 const JOB_TYPES: JobType[] = [
   "Full-time",
   "Part-time",
-  "Contract",
   "Internship",
   "Remote",
   "On-site",
   "Hybrid",
+  "Contract",
 ];
+const SALARY_OPTS = [0, 30, 50, 80, 100, 150, 200];
 
 export default function FilterScreen() {
   const { colors, isDark } = useTheme();
-  const [sortBy, setSortBy] = useState("Latest Jobs");
-  const [selectedAreas, setSelectedAreas] = useState<string[]>([]);
-  const [selectedTypes, setSelectedTypes] = useState<JobType[]>([]);
-  const [salary, setSalary] = useState(50);
 
-  const toggleArea = (a: string) =>
-    setSelectedAreas((prev) =>
-      prev.includes(a) ? prev.filter((x) => x !== a) : [...prev, a],
-    );
-  const toggleType = (t: JobType) =>
-    setSelectedTypes((prev) =>
-      prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t],
-    );
+  const [sortBy, setSortBy] = useState<FilterState["sortBy"]>("Latest");
+  const [locations, setLocations] = useState<string[]>([]);
+  const [jobTypes, setJobTypes] = useState<JobType[]>([]);
+  const [salaryMin, setSalaryMin] = useState(0);
+  const [isInternship, setIsInternship] = useState<boolean | null>(null);
+
+  const toggleArr = <T,>(arr: T[], item: T, set: (v: T[]) => void) =>
+    set(arr.includes(item) ? arr.filter((x) => x !== item) : [...arr, item]);
+
+  const clearAll = () => {
+    setSortBy("Latest");
+    setLocations([]);
+    setJobTypes([]);
+    setSalaryMin(0);
+    setIsInternship(null);
+  };
+
+  const apply = () => {
+    // Pass filters back via router params
+    router.back();
+  };
 
   const s = makeStyles(colors);
 
   return (
-    <SafeAreaView style={s.safe}>
+    <SafeAreaView style={s.safe} edges={["top", "bottom"]}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
 
+      {/* Header */}
       <View style={s.header}>
         <Text style={[s.title, { color: colors.textPrimary }]}>
           Filter & Sort
         </Text>
-        <TouchableOpacity
-          onPress={() => {
-            setSelectedAreas([]);
-            setSelectedTypes([]);
-            setSortBy("Latest Jobs");
-            setSalary(50);
-          }}
-        >
+        <TouchableOpacity onPress={clearAll}>
           <Text style={[s.clearAll, { color: colors.textSecondary }]}>
             Clear All
           </Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={() => router.back()}>
-          <Text style={{ fontSize: 20, color: colors.textTertiary }}>✕</Text>
+          <Text style={[s.close, { color: colors.textTertiary }]}>✕</Text>
         </TouchableOpacity>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
+      <ScrollView showsVerticalScrollIndicator={false}>
         {/* Sort By */}
-        <View style={s.block}>
-          <Text style={[s.blockTitle, { color: colors.textPrimary }]}>
+        <View style={s.section}>
+          <Text style={[s.sectionTitle, { color: colors.textPrimary }]}>
             ⇌ Sort By
           </Text>
           {SORT_OPTIONS.map((opt) => (
             <TouchableOpacity
-              key={opt}
+              key={opt.key}
               style={[s.radioRow, { borderColor: colors.border }]}
-              onPress={() => setSortBy(opt)}
+              onPress={() => setSortBy(opt.key)}
             >
               <Text style={[s.radioLabel, { color: colors.textPrimary }]}>
-                {opt}
+                {opt.label}
               </Text>
               <View style={[s.radio, { borderColor: colors.brand }]}>
-                {sortBy === opt && (
+                {sortBy === opt.key && (
                   <View
                     style={[s.radioDot, { backgroundColor: colors.brand }]}
                   />
@@ -102,36 +115,34 @@ export default function FilterScreen() {
         </View>
 
         {/* Location */}
-        <View style={s.block}>
-          <Text style={[s.blockTitle, { color: colors.textPrimary }]}>
+        <View style={s.section}>
+          <Text style={[s.sectionTitle, { color: colors.textPrimary }]}>
             📍 Location
           </Text>
-          <View style={s.chips}>
-            {AREAS.map((area) => (
+          <View style={s.wrap}>
+            {AREAS.map((a) => (
               <TouchableOpacity
-                key={area}
+                key={a}
                 style={[
                   s.chip,
                   {
-                    backgroundColor: selectedAreas.includes(area)
+                    backgroundColor: locations.includes(a)
                       ? colors.brand
                       : colors.bgSecondary,
-                    borderColor: selectedAreas.includes(area)
+                    borderColor: locations.includes(a)
                       ? colors.brand
                       : colors.border,
                   },
                 ]}
-                onPress={() => toggleArea(area)}
+                onPress={() => toggleArr(locations, a, setLocations)}
               >
                 <Text
                   style={{
-                    color: selectedAreas.includes(area)
-                      ? "#fff"
-                      : colors.textPrimary,
+                    color: locations.includes(a) ? "#fff" : colors.textPrimary,
                     fontSize: 13,
                   }}
                 >
-                  {area}
+                  {a}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -139,42 +150,84 @@ export default function FilterScreen() {
         </View>
 
         {/* Job Type */}
-        <View style={s.block}>
-          <Text style={[s.blockTitle, { color: colors.textPrimary }]}>
+        <View style={s.section}>
+          <Text style={[s.sectionTitle, { color: colors.textPrimary }]}>
             🗂 Job Type
           </Text>
-          <View style={s.typeGrid}>
-            {JOB_TYPES.map((type) => (
+          <View style={s.checkGrid}>
+            {JOB_TYPES.map((t) => (
               <TouchableOpacity
-                key={type}
+                key={t}
                 style={[
-                  s.typeCell,
+                  s.checkRow,
                   {
                     backgroundColor: colors.bgSecondary,
                     borderColor: colors.border,
                   },
                 ]}
-                onPress={() => toggleType(type)}
+                onPress={() => toggleArr(jobTypes, t, setJobTypes)}
               >
                 <View
                   style={[
                     s.checkbox,
                     {
-                      borderColor: selectedTypes.includes(type)
+                      borderColor: jobTypes.includes(t)
                         ? colors.brand
                         : colors.border,
-                      backgroundColor: selectedTypes.includes(type)
+                      backgroundColor: jobTypes.includes(t)
                         ? colors.brand
                         : "transparent",
                     },
                   ]}
                 >
-                  {selectedTypes.includes(type) && (
+                  {jobTypes.includes(t) && (
                     <Text style={{ color: "#fff", fontSize: 11 }}>✓</Text>
                   )}
                 </View>
-                <Text style={[s.typeLabel, { color: colors.textPrimary }]}>
-                  {type}
+                <Text style={[s.checkLabel, { color: colors.textPrimary }]}>
+                  {t}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        {/* Role Type */}
+        <View style={s.section}>
+          <Text style={[s.sectionTitle, { color: colors.textPrimary }]}>
+            🎓 Role Type
+          </Text>
+          <View style={s.wrap}>
+            {(
+              [
+                { label: "All Roles", value: null },
+                { label: "Internships Only", value: true },
+                { label: "Full Roles Only", value: false },
+              ] as const
+            ).map((opt) => (
+              <TouchableOpacity
+                key={String(opt.value)}
+                style={[
+                  s.chip,
+                  {
+                    backgroundColor:
+                      isInternship === opt.value
+                        ? colors.brand
+                        : colors.bgSecondary,
+                    borderColor:
+                      isInternship === opt.value ? colors.brand : colors.border,
+                  },
+                ]}
+                onPress={() => setIsInternship(opt.value)}
+              >
+                <Text
+                  style={{
+                    color:
+                      isInternship === opt.value ? "#fff" : colors.textPrimary,
+                    fontSize: 13,
+                  }}
+                >
+                  {opt.label}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -182,10 +235,10 @@ export default function FilterScreen() {
         </View>
 
         {/* Salary */}
-        <View style={s.block}>
+        <View style={s.section}>
           <View style={s.salaryHeader}>
-            <Text style={[s.blockTitle, { color: colors.textPrimary }]}>
-              💵 Salary Range
+            <Text style={[s.sectionTitle, { color: colors.textPrimary }]}>
+              💵 Min Salary
             </Text>
             <View
               style={[s.salaryBadge, { backgroundColor: colors.brandLight }]}
@@ -195,52 +248,32 @@ export default function FilterScreen() {
                   { color: colors.brand, fontSize: 12, fontWeight: "600" },
                 ]}
               >
-                PKR {salary}k – 500k+
+                {salaryMin === 0 ? "Any" : `PKR ${salaryMin}k+`}
               </Text>
             </View>
           </View>
-          <View style={[s.sliderTrack, { backgroundColor: colors.bgTertiary }]}>
-            <View
-              style={[
-                s.sliderFill,
-                {
-                  width: `${(salary / 500) * 100}%`,
-                  backgroundColor: colors.brand,
-                },
-              ]}
-            />
-          </View>
-          <View style={s.sliderRow}>
-            <Text style={[{ color: colors.textTertiary, fontSize: 12 }]}>
-              30k
-            </Text>
-            <Text style={[{ color: colors.textTertiary, fontSize: 12 }]}>
-              500k
-            </Text>
-          </View>
-          <View style={s.salaryBtns}>
-            {[30, 50, 80, 100, 150, 200].map((v) => (
+          <View style={s.wrap}>
+            {SALARY_OPTS.map((v) => (
               <TouchableOpacity
                 key={v}
                 style={[
-                  s.salaryBtn,
+                  s.chip,
                   {
-                    borderColor: salary === v ? colors.brand : colors.border,
+                    borderColor: salaryMin === v ? colors.brand : colors.border,
                     backgroundColor:
-                      salary === v ? colors.brandLight : "transparent",
+                      salaryMin === v ? colors.brandLight : "transparent",
                   },
                 ]}
-                onPress={() => setSalary(v)}
+                onPress={() => setSalaryMin(v)}
               >
                 <Text
-                  style={[
-                    {
-                      color: salary === v ? colors.brand : colors.textSecondary,
-                      fontSize: 12,
-                    },
-                  ]}
+                  style={{
+                    color:
+                      salaryMin === v ? colors.brand : colors.textSecondary,
+                    fontSize: 13,
+                  }}
                 >
-                  {v}k+
+                  {v === 0 ? "Any" : `${v}k+`}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -250,7 +283,7 @@ export default function FilterScreen() {
         <View style={{ height: 120 }} />
       </ScrollView>
 
-      {/* Bottom actions */}
+      {/* Footer */}
       <View
         style={[
           s.footer,
@@ -259,17 +292,19 @@ export default function FilterScreen() {
       >
         <TouchableOpacity
           style={[s.clearBtn, { borderColor: colors.border }]}
-          onPress={() => router.back()}
+          onPress={clearAll}
         >
-          <Text style={[s.clearBtnText, { color: colors.textPrimary }]}>
+          <Text style={[{ color: colors.textPrimary, fontWeight: "600" }]}>
             Clear Filters
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[s.applyBtn, { backgroundColor: colors.brandDark }]}
-          onPress={() => router.back()}
+          onPress={apply}
         >
-          <Text style={s.applyBtnText}>Apply Filters</Text>
+          <Text style={{ color: "#fff", fontWeight: "700", fontSize: 15 }}>
+            Apply Filters
+          </Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -282,7 +317,6 @@ const makeStyles = (c: any) =>
     header: {
       flexDirection: "row",
       alignItems: "center",
-      justifyContent: "space-between",
       paddingHorizontal: 20,
       paddingVertical: 16,
       backgroundColor: c.bgPrimary,
@@ -291,8 +325,9 @@ const makeStyles = (c: any) =>
     },
     title: { flex: 1, fontSize: 20, fontWeight: "700" },
     clearAll: { fontSize: 14, marginRight: 16 },
-    block: { paddingHorizontal: 20, paddingTop: 24, paddingBottom: 8 },
-    blockTitle: { fontSize: 16, fontWeight: "700", marginBottom: 14 },
+    close: { fontSize: 22, paddingLeft: 4 },
+    section: { paddingHorizontal: 20, paddingTop: 22, paddingBottom: 4 },
+    sectionTitle: { fontSize: 15, fontWeight: "700", marginBottom: 14 },
     radioRow: {
       flexDirection: "row",
       alignItems: "center",
@@ -313,15 +348,15 @@ const makeStyles = (c: any) =>
       justifyContent: "center",
     },
     radioDot: { width: 10, height: 10, borderRadius: 5 },
-    chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+    wrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
     chip: {
       borderWidth: 1,
       borderRadius: 20,
-      paddingHorizontal: 16,
+      paddingHorizontal: 14,
       paddingVertical: 8,
     },
-    typeGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-    typeCell: {
+    checkGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+    checkRow: {
       flexDirection: "row",
       alignItems: "center",
       gap: 8,
@@ -339,31 +374,17 @@ const makeStyles = (c: any) =>
       alignItems: "center",
       justifyContent: "center",
     },
-    typeLabel: { fontSize: 13 },
+    checkLabel: { fontSize: 13 },
     salaryHeader: {
       flexDirection: "row",
       justifyContent: "space-between",
       alignItems: "center",
-      marginBottom: 16,
+      marginBottom: 12,
     },
     salaryBadge: {
       paddingHorizontal: 12,
       paddingVertical: 4,
       borderRadius: 20,
-    },
-    sliderTrack: { height: 6, borderRadius: 3, marginBottom: 8 },
-    sliderFill: { height: 6, borderRadius: 3 },
-    sliderRow: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      marginBottom: 12,
-    },
-    salaryBtns: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-    salaryBtn: {
-      borderWidth: 1,
-      borderRadius: 20,
-      paddingHorizontal: 14,
-      paddingVertical: 6,
     },
     footer: { flexDirection: "row", gap: 12, padding: 16, borderTopWidth: 1 },
     clearBtn: {
@@ -374,7 +395,6 @@ const makeStyles = (c: any) =>
       alignItems: "center",
       justifyContent: "center",
     },
-    clearBtnText: { fontSize: 14, fontWeight: "600" },
     applyBtn: {
       flex: 2,
       borderRadius: 14,
@@ -382,5 +402,4 @@ const makeStyles = (c: any) =>
       alignItems: "center",
       justifyContent: "center",
     },
-    applyBtnText: { color: "#fff", fontSize: 14, fontWeight: "700" },
   });

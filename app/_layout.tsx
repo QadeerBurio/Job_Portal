@@ -1,63 +1,36 @@
-import FontAwesome from "@expo/vector-icons/FontAwesome";
-import {
-  DarkTheme,
-  DefaultTheme,
-  ThemeProvider,
-} from "@react-navigation/native";
-import { useFonts } from "expo-font";
+// app/_layout.tsx
+// ─────────────────────────────────────────────────────────────────────────────
+// ROOT layout. ThemeProvider and AuthProvider MUST wrap the Stack here
+// so EVERY screen (tabs + filter + job/[id] + login) gets the context.
+// The "useTheme must be used within ThemeProvider" crash happens when
+// filter.tsx or job/[id].tsx render outside this provider tree.
+// ─────────────────────────────────────────────────────────────────────────────
 import { Stack } from "expo-router";
-import * as SplashScreen from "expo-splash-screen";
-import { useEffect } from "react";
-import "react-native-reanimated";
-
-import { useColorScheme } from "@/components/useColorScheme";
-
-export {
-  // Catch any errors thrown by the Layout component.
-  ErrorBoundary
-} from "expo-router";
-
-export const unstable_settings = {
-  // Ensure that reloading on `/modal` keeps a back button present.
-  initialRouteName: "(tabs)",
-};
-
-// Prevent the splash screen from auto-hiding before asset loading is complete.
-SplashScreen.preventAutoHideAsync();
+import React from "react";
+import { SafeAreaProvider } from "react-native-safe-area-context";
+//import { AuthProvider } from "../context/AuthContext";
+import { ThemeProvider } from "../context/ThemeContext";
 
 export default function RootLayout() {
-  const [loaded, error] = useFonts({
-    SpaceMono: require("../assets/fonts/SpaceMono-Regular.ttf"),
-    ...FontAwesome.font,
-  });
-
-  // Expo Router uses Error Boundaries to catch errors in the navigation tree.
-  useEffect(() => {
-    if (error) throw error;
-  }, [error]);
-
-  useEffect(() => {
-    if (loaded) {
-      SplashScreen.hideAsync();
-    }
-  }, [loaded]);
-
-  if (!loaded) {
-    return null;
-  }
-
-  return <RootLayoutNav />;
-}
-
-function RootLayoutNav() {
-  const colorScheme = useColorScheme();
-
   return (
-    <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: "modal" }} />
-      </Stack>
-    </ThemeProvider>
+    // ✅ SafeAreaProvider must be the outermost wrapper
+    <SafeAreaProvider>
+      {/* ✅ ThemeProvider wraps Stack so ALL screens including
+           filter.tsx and job/[id].tsx can call useTheme() */}
+      <ThemeProvider>
+        <Stack screenOptions={{ headerShown: false }}>
+          {/* (tabs) group contains Home/Search/Saved/Profile with tab bar */}
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          {/* These screens slide in as full-screen Stack pages, no tab bar */}
+          <Stack.Screen name="login" options={{ headerShown: false }} />
+          <Stack.Screen name="signup" options={{ headerShown: false }} />
+          <Stack.Screen
+            name="filter"
+            options={{ headerShown: false, presentation: "modal" }}
+          />
+          <Stack.Screen name="job/[id]" options={{ headerShown: false }} />
+        </Stack>
+      </ThemeProvider>
+    </SafeAreaProvider>
   );
 }

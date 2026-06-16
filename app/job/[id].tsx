@@ -1,16 +1,17 @@
-// app/job/[id].tsx  — Job Detail Screen
+// app/job/[id].tsx — Job Detail Screen
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    SafeAreaView,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Linking,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "../../context/ThemeContext";
 import { fetchJobById } from "../../services/jobsService";
 import { Job } from "../../types";
@@ -19,55 +20,90 @@ export default function JobDetailScreen() {
   const { colors, isDark } = useTheme();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [job, setJob] = useState<Job | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (id) fetchJobById(id).then(setJob);
+    if (!id) return;
+    fetchJobById(id as string)
+      .then((data) => {
+        if (data) setJob(data);
+        else setError("Job not found.");
+      })
+      .catch((e) => setError(e?.message ?? "Failed to load job"))
+      .finally(() => setLoading(false));
   }, [id]);
-
-  if (!job) {
-    return (
-      <SafeAreaView
-        style={{
-          flex: 1,
-          backgroundColor: colors.bgSecondary,
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        <ActivityIndicator color={colors.brand} size="large" />
-      </SafeAreaView>
-    );
-  }
 
   const s = makeStyles(colors);
 
+  if (loading)
+    return (
+      <SafeAreaView style={s.safe} edges={["top"]}>
+        <View style={s.center}>
+          <ActivityIndicator size="large" color={colors.brand} />
+          <Text style={[{ color: colors.textSecondary, marginTop: 12 }]}>
+            Loading job…
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+
+  if (error || !job)
+    return (
+      <SafeAreaView style={s.safe} edges={["top"]}>
+        <TouchableOpacity style={s.backBtn} onPress={() => router.back()}>
+          <Text style={[s.backText, { color: colors.textPrimary }]}>
+            ‹ Back
+          </Text>
+        </TouchableOpacity>
+        <View style={s.center}>
+          <Text style={{ fontSize: 40 }}>😕</Text>
+          <Text
+            style={[
+              {
+                color: colors.textSecondary,
+                marginTop: 12,
+                textAlign: "center",
+              },
+            ]}
+          >
+            {error ?? "Job not found"}
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+
   return (
-    <SafeAreaView style={s.safe}>
+    <SafeAreaView style={s.safe} edges={["top"]}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
 
       {/* Top bar */}
-      <View style={s.topBar}>
+      <View
+        style={[
+          s.topBar,
+          {
+            backgroundColor: colors.bgPrimary,
+            borderBottomColor: colors.border,
+          },
+        ]}
+      >
         <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
           <Text style={[s.backText, { color: colors.textPrimary }]}>‹</Text>
         </TouchableOpacity>
-        <View style={s.logoRow}>
-          <Text style={[s.logoLabel, { color: colors.textPrimary }]}>
-            KarachiJobs
-          </Text>
-        </View>
-        <TouchableOpacity>
-          <Text style={{ fontSize: 20, color: colors.textTertiary }}>🔖</Text>
-        </TouchableOpacity>
+        <Text style={[s.topTitle, { color: colors.textPrimary }]}>
+          KarachiJobs
+        </Text>
+        <View style={{ width: 40 }} />
       </View>
 
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={s.scroll}
       >
-        {/* Company logo placeholder */}
-        <View style={s.logoSection}>
+        {/* Logo */}
+        <View style={s.logoWrap}>
           <View style={[s.logo, { backgroundColor: colors.bgTertiary }]}>
-            <Text style={{ fontSize: 28 }}>💼</Text>
+            <Text style={{ fontSize: 32 }}>💼</Text>
           </View>
         </View>
 
@@ -79,91 +115,109 @@ export default function JobDetailScreen() {
         </Text>
 
         {/* Info pills */}
-        <View style={s.infoPills}>
+        <View style={s.pills}>
           {[
             { icon: "📍", text: job.area },
             { icon: "🕐", text: job.jobType },
-            { icon: "💰", text: `${job.salaryMin}k – ${job.salaryMax}k` },
-          ].map((pill) => (
+            { icon: "💰", text: `${job.salaryMin}k–${job.salaryMax}k PKR` },
+          ].map((p) => (
             <View
-              key={pill.text}
+              key={p.text}
               style={[
                 s.pill,
                 { backgroundColor: colors.bgCard, borderColor: colors.border },
               ]}
             >
-              <Text style={{ fontSize: 18, color: colors.brand }}>
-                {pill.icon}
-              </Text>
+              <Text style={{ color: colors.brand }}>{p.icon}</Text>
               <Text style={[s.pillText, { color: colors.textSecondary }]}>
-                {pill.text}
+                {p.text}
               </Text>
             </View>
           ))}
+        </View>
+
+        {/* Badges */}
+        <View style={s.badges}>
+          {job.isInternship && (
+            <View style={[s.badge, { backgroundColor: "#EC489922" }]}>
+              <Text style={[s.badgeText, { color: "#EC4899" }]}>
+                Internship
+              </Text>
+            </View>
+          )}
+          {job.isTrainee && (
+            <View style={[s.badge, { backgroundColor: "#8B5CF622" }]}>
+              <Text style={[s.badgeText, { color: "#8B5CF6" }]}>Trainee</Text>
+            </View>
+          )}
+          <View style={[s.badge, { backgroundColor: colors.brandLight }]}>
+            <Text style={[s.badgeText, { color: colors.brand }]}>
+              {job.category}
+            </Text>
+          </View>
         </View>
 
         {/* About */}
-        <View
-          style={[
-            s.section,
-            { backgroundColor: colors.bgCard, borderColor: colors.border },
-          ]}
-        >
-          <Text style={[s.sectionTitle, { color: colors.textPrimary }]}>
-            About the Role
-          </Text>
-          <Text style={[s.description, { color: colors.textSecondary }]}>
-            {job.description}
-          </Text>
-          {job.responsibilities.map((r) => (
-            <View key={r} style={s.bulletRow}>
-              <Text style={[s.bullet, { color: colors.brand }]}>✓</Text>
-              <Text style={[s.bulletText, { color: colors.textSecondary }]}>
-                {r}
-              </Text>
-            </View>
-          ))}
-        </View>
-
-        {/* Requirements */}
-        <View
-          style={[
-            s.section,
-            { backgroundColor: colors.bgCard, borderColor: colors.border },
-          ]}
-        >
-          <Text style={[s.sectionTitle, { color: colors.textPrimary }]}>
-            Requirements
-          </Text>
-          <View style={s.tags}>
-            <View style={[s.tag, { backgroundColor: colors.brandLight }]}>
-              <Text style={[s.tagText, { color: colors.brand }]}>
-                {job.experience}
-              </Text>
-            </View>
-            {job.tags.map((t) => (
-              <View
-                key={t}
-                style={[s.tag, { backgroundColor: colors.brandLight }]}
-              >
-                <Text style={[s.tagText, { color: colors.brand }]}>{t}</Text>
+        {job.description ? (
+          <View
+            style={[
+              s.card,
+              { backgroundColor: colors.bgCard, borderColor: colors.border },
+            ]}
+          >
+            <Text style={[s.cardTitle, { color: colors.textPrimary }]}>
+              About the Role
+            </Text>
+            <Text style={[s.cardBody, { color: colors.textSecondary }]}>
+              {job.description}
+            </Text>
+            {job.responsibilities?.map((r, i) => (
+              <View key={i} style={s.bulletRow}>
+                <Text style={[s.bullet, { color: colors.brand }]}>✓</Text>
+                <Text style={[s.bulletText, { color: colors.textSecondary }]}>
+                  {r}
+                </Text>
               </View>
             ))}
           </View>
-          {job.requirements.map((r) => (
-            <View key={r} style={s.bulletRow}>
-              <Text style={[{ color: colors.textTertiary }]}>○</Text>
-              <Text style={[s.bulletText, { color: colors.textSecondary }]}>
-                {r}
-              </Text>
+        ) : null}
+
+        {/* Requirements */}
+        {(job.requirements?.length > 0 || job.tags?.length > 0) && (
+          <View
+            style={[
+              s.card,
+              { backgroundColor: colors.bgCard, borderColor: colors.border },
+            ]}
+          >
+            <Text style={[s.cardTitle, { color: colors.textPrimary }]}>
+              Requirements
+            </Text>
+            <View style={s.tags}>
+              {job.tags?.map((t) => (
+                <View
+                  key={t}
+                  style={[s.tag, { backgroundColor: colors.brandLight }]}
+                >
+                  <Text style={[s.tagText, { color: colors.brand }]}>{t}</Text>
+                </View>
+              ))}
             </View>
-          ))}
-        </View>
+            {job.requirements?.map((r, i) => (
+              <View key={i} style={s.bulletRow}>
+                <Text style={{ color: colors.textTertiary }}>○</Text>
+                <Text style={[s.bulletText, { color: colors.textSecondary }]}>
+                  {r}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
 
         {/* Company */}
         <View
           style={[
-            s.section,
+            s.card,
             { backgroundColor: colors.bgCard, borderColor: colors.border },
           ]}
         >
@@ -171,10 +225,10 @@ export default function JobDetailScreen() {
             <View
               style={[s.companyLogo, { backgroundColor: colors.bgTertiary }]}
             >
-              <Text style={{ fontSize: 20 }}>🏢</Text>
+              <Text style={{ fontSize: 22 }}>🏢</Text>
             </View>
-            <View>
-              <Text style={[s.sectionTitle, { color: colors.textPrimary }]}>
+            <View style={{ flex: 1 }}>
+              <Text style={[s.cardTitle, { color: colors.textPrimary }]}>
                 {job.company}
               </Text>
               <Text
@@ -200,8 +254,11 @@ export default function JobDetailScreen() {
       >
         <TouchableOpacity
           style={[s.applyBtn, { backgroundColor: colors.brandDark }]}
+          onPress={() => {
+            if (job.applyUrl) Linking.openURL(job.applyUrl as string);
+          }}
         >
-          <Text style={s.applyText}>Apply Now</Text>
+          <Text style={s.applyBtnText}>Apply Now</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -211,27 +268,30 @@ export default function JobDetailScreen() {
 const makeStyles = (c: any) =>
   StyleSheet.create({
     safe: { flex: 1, backgroundColor: c.bgSecondary },
+    center: {
+      flex: 1,
+      alignItems: "center",
+      justifyContent: "center",
+      padding: 24,
+    },
     topBar: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
       paddingHorizontal: 16,
       paddingVertical: 12,
-      backgroundColor: c.bgPrimary,
       borderBottomWidth: 1,
-      borderBottomColor: c.border,
     },
     backBtn: {
-      width: 36,
-      height: 36,
+      width: 40,
+      height: 40,
       alignItems: "center",
       justifyContent: "center",
     },
-    backText: { fontSize: 26, fontWeight: "300" },
-    logoRow: { flex: 1, alignItems: "center" },
-    logoLabel: { fontSize: 16, fontWeight: "700" },
+    backText: { fontSize: 28, fontWeight: "300" },
+    topTitle: { fontSize: 16, fontWeight: "700" },
     scroll: { padding: 20 },
-    logoSection: { alignItems: "center", marginBottom: 16 },
+    logoWrap: { alignItems: "center", marginBottom: 16 },
     logo: {
       width: 80,
       height: 80,
@@ -245,32 +305,36 @@ const makeStyles = (c: any) =>
       textAlign: "center",
       marginBottom: 4,
     },
-    company: { fontSize: 15, textAlign: "center", marginBottom: 20 },
-    infoPills: {
+    company: { fontSize: 15, textAlign: "center", marginBottom: 16 },
+    pills: {
       flexDirection: "row",
-      gap: 10,
-      marginBottom: 20,
+      gap: 8,
       flexWrap: "wrap",
+      marginBottom: 12,
+      justifyContent: "center",
     },
     pill: {
-      flex: 1,
-      minWidth: 90,
-      flexDirection: "column",
+      flexDirection: "row",
       alignItems: "center",
-      gap: 4,
+      gap: 6,
       borderWidth: 1,
-      borderRadius: 14,
-      padding: 12,
+      borderRadius: 12,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
     },
-    pillText: { fontSize: 12, textAlign: "center" },
-    section: {
-      borderWidth: 1,
-      borderRadius: 16,
-      padding: 18,
-      marginBottom: 16,
+    pillText: { fontSize: 13 },
+    badges: {
+      flexDirection: "row",
+      gap: 8,
+      flexWrap: "wrap",
+      marginBottom: 20,
+      justifyContent: "center",
     },
-    sectionTitle: { fontSize: 17, fontWeight: "700", marginBottom: 12 },
-    description: { fontSize: 14, lineHeight: 22, marginBottom: 12 },
+    badge: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 20 },
+    badgeText: { fontSize: 12, fontWeight: "600" },
+    card: { borderWidth: 1, borderRadius: 16, padding: 18, marginBottom: 16 },
+    cardTitle: { fontSize: 17, fontWeight: "700", marginBottom: 12 },
+    cardBody: { fontSize: 14, lineHeight: 22, marginBottom: 12 },
     bulletRow: {
       flexDirection: "row",
       gap: 10,
@@ -304,5 +368,5 @@ const makeStyles = (c: any) =>
       alignItems: "center",
       justifyContent: "center",
     },
-    applyText: { color: "#fff", fontSize: 16, fontWeight: "700" },
+    applyBtnText: { color: "#fff", fontSize: 16, fontWeight: "700" },
   });
