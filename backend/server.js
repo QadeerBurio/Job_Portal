@@ -24,6 +24,9 @@ mongoose
   .connect(process.env.MONGODB_URI)
   .then(() => {
     console.log("✅ MongoDB Atlas connected");
+
+    console.log("Database:", mongoose.connection.db.databaseName);
+    console.log("Collection:", Job.collection.name);
   })
   .catch((err) => {
     console.error("❌ MongoDB error:", err.message);
@@ -94,7 +97,7 @@ app.get("/api/jobs", async (req, res) => {
       area,
       sortBy,
       page = 1,
-      limit = 20,
+      limit = 500,
     } = req.query;
 
     const filter = {};
@@ -198,7 +201,6 @@ app.get("/api/jobs/recommended", async (req, res) => {
         createdAt: -1,
         _id: -1,
       })
-      .limit(6)
       .lean();
 
     res.json(jobs);

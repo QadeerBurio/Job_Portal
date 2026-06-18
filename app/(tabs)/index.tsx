@@ -34,7 +34,7 @@ export default function HomeScreen() {
 
   useEffect(() => {
     fetchRecommended().then(setRecommended);
-    fetchJobs("", {}).then((jobs) => setRecent(jobs.slice(0, 8)));
+    fetchJobs("", {}).then((jobs) => setRecent(jobs));
   }, []);
 
   const s = makeStyles(colors);
@@ -191,7 +191,7 @@ export default function HomeScreen() {
         <View style={s.section}>
           <View style={s.sectionHeader}>
             <Text style={[s.sectionTitle, { color: colors.textPrimary }]}>
-              Recent Jobs in Karachi
+              All Jobs in Karachi
             </Text>
             <Text style={[s.count, { color: colors.textTertiary }]}>
               {recent.length} Found

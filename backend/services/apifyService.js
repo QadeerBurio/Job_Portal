@@ -9,7 +9,7 @@ async function fetchJobs() {
       {
         keyword: "Software Engineer",
         country: "Pakistan",
-        max_results: 100,
+        max_results: 500,
         location: "Karachi",
         posted_since: "7 days",
         job_type: "all",

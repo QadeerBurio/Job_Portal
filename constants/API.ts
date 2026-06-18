@@ -48,7 +48,7 @@ export const ENDPOINTS = {
 
 // ── Request config ────────────────────────────────────────────────────────────
 export const TIMEOUT_MS = 10_000;
-export const PAGE_SIZE = 20;
+export const PAGE_SIZE = 500;
 
 // ── AsyncStorage keys ─────────────────────────────────────────────────────────
 export const STORAGE_KEYS = {

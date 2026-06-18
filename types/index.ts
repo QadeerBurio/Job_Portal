@@ -58,6 +58,7 @@ export type User = {
   isAvailable: boolean;
   appliedCount: number;
   interviewCount: number;
+  savedJobIds?: string[];
 };
 
 // Add these to your types/index.ts
