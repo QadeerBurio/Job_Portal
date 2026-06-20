@@ -119,7 +119,7 @@ export default function JobDetailScreen() {
           {[
             { icon: "📍", text: job.area },
             { icon: "🕐", text: job.jobType },
-            { icon: "💰", text: `${job.salaryMin}k–${job.salaryMax}k PKR` },
+            { icon: "💰", text: `${job.salaryMin}–${job.salaryMax} PKR` },
           ].map((p) => (
             <View
               key={p.text}

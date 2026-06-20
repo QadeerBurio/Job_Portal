@@ -102,7 +102,7 @@ export default function JobCard({ job, onPress, onSave, compact }: Props) {
           )}
           <View style={[styles.badge, { backgroundColor: colors.brandLight }]}>
             <Text style={[styles.badgeText, { color: colors.brand }]}>
-              Rs. {job.salaryMin}k – {job.salaryMax}k
+              Rs. {job.salaryMin} – {job.salaryMax}
             </Text>
           </View>
         </View>

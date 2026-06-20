@@ -175,11 +175,10 @@ export default function HomeScreen() {
                 </Text>
                 <Text style={[s.recCompany, { color: colors.textSecondary }]}>
                   {job.company} · {job.area}
-                </Text>
-                <Text style={[s.recSalary, { color: colors.textPrimary }]}>
-                  {job.salaryMin}k – {job.salaryMax}k{" "}
-                  <Text style={{ fontSize: 12, color: colors.textTertiary }}>
-                    PKR
+                  <Text style={[s.recSalary, { color: colors.textPrimary }]}>
+                    {job.salaryMin > 0 || job.salaryMax > 0
+                      ? `\nPKR ${(job.salaryMin || 0).toLocaleString()} - ${(job.salaryMax || 0).toLocaleString()}`
+                      : "\nSalary Not Disclosed"}
                   </Text>
                 </Text>
               </TouchableOpacity>
@@ -191,7 +190,7 @@ export default function HomeScreen() {
         <View style={s.section}>
           <View style={s.sectionHeader}>
             <Text style={[s.sectionTitle, { color: colors.textPrimary }]}>
-              All Jobs in Karachi
+              All Recent Jobs in Karachi
             </Text>
             <Text style={[s.count, { color: colors.textTertiary }]}>
               {recent.length} Found
@@ -241,7 +240,9 @@ export default function HomeScreen() {
                     </Text>
                   </View>
                   <Text style={[s.recentSalary, { color: colors.brand }]}>
-                    {job.salaryMin}k–{job.salaryMax}k PKR
+                    {job.salaryMin > 0 || job.salaryMax > 0
+                      ? `\nPKR ${(job.salaryMin || 0).toLocaleString()} - ${(job.salaryMax || 0).toLocaleString()}`
+                      : "\nSalary Not Disclosed"}
                   </Text>
                 </View>
               </View>
