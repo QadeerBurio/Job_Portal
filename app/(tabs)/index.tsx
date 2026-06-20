@@ -2,14 +2,14 @@
 import { router } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    SafeAreaView,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import ThemeToggle from "../../components/ThemeToggle";
 import { useTheme } from "../../context/ThemeContext";
@@ -177,7 +177,7 @@ export default function HomeScreen() {
                   {job.company} · {job.area}
                   <Text style={[s.recSalary, { color: colors.textPrimary }]}>
                     {job.salaryMin > 0 || job.salaryMax > 0
-                      ? `\nPKR ${(job.salaryMin || 0).toLocaleString()} - ${(job.salaryMax || 0).toLocaleString()}`
+                      ? `PKR ${(job.salaryMin || 0).toLocaleString()} - ${(job.salaryMax || 0).toLocaleString()}`
                       : "\nSalary Not Disclosed"}
                   </Text>
                 </Text>

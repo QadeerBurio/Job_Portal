@@ -26,6 +26,12 @@ const TABS = [
     activeIcon: "bookmark",
   },
   {
+    name: "resume",
+    label: "Resume",
+    icon: "document-text-outline",
+    activeIcon: "document-text",
+  },
+  {
     name: "profile",
     label: "Profile",
     icon: "person-outline",
@@ -131,6 +137,7 @@ const s = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
+    gap: 4,
   },
 
   tabLabel: {

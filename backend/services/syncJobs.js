@@ -1,14 +1,14 @@
+const Job = require("../models/Job");
+
+const fetchJobs = require("./apifyService");
+
+const transformJobs = require("./transformJobs");
+
 async function syncJobs() {
   try {
-    console.log("Fetching jobs from Apify...");
-
     const rawJobs = await fetchJobs();
 
-    console.log("Raw jobs received:", rawJobs.length);
-
     const jobs = transformJobs(rawJobs);
-
-    console.log("Transformed jobs:", jobs.length);
 
     for (const job of jobs) {
       await Job.updateOne(
@@ -31,3 +31,5 @@ async function syncJobs() {
     console.error("Sync Error:", error.message);
   }
 }
+
+module.exports = syncJobs;

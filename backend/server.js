@@ -7,6 +7,8 @@ const mongoose = require("mongoose");
 const cors = require("cors");
 const cron = require("node-cron");
 
+const authRoutes = require("./routes/authRoutes");
+
 const syncJobs = require("./services/syncJobs");
 const Job = require("./models/Job");
 
@@ -19,6 +21,8 @@ const app = express();
 
 app.use(cors());
 app.use(express.json());
+
+app.use("/api/auth", authRoutes);
 
 mongoose
   .connect(process.env.MONGODB_URI)

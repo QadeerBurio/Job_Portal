@@ -1,130 +1,102 @@
 // context/AuthContext.tsx
-// ─────────────────────────────────────────────────────────────────────────────
-// Provides auth state (user, token) and actions (login, register, logout)
-// to the whole app. Persists token in AsyncStorage.
-// ─────────────────────────────────────────────────────────────────────────────
-/*
+
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, {
-    createContext,
-    useCallback,
-    useContext,
-    useEffect,
-    useState,
+  createContext,
+  ReactNode,
+  useContext,
+  useEffect,
+  useState,
 } from "react";
-import { STORAGE_KEYS } from "../constants/API";
-import {
-    login as apiLogin,
-    register as apiRegister,
-} from "../services/authService";
-import { LoginPayload, RegisterPayload, User } from "../types";
 
-// ── Types ─────────────────────────────────────────────────────────────────────
+interface User {
+  id?: string;
+  name: string;
+  email: string;
+}
 
-interface AuthState {
+interface LoginData {
+  user: User;
+  token: string;
+}
+
+interface AuthContextType {
   user: User | null;
-  token: string | null;
-  isLoading: boolean; // true while restoring from storage on app start
+  login: (data: LoginData) => Promise<void>;
+  logout: () => Promise<void>;
+  isLoading: boolean;
   isLoggedIn: boolean;
 }
 
-interface AuthContextType extends AuthState {
-  login: (payload: LoginPayload) => Promise<void>;
-  register: (payload: RegisterPayload) => Promise<void>;
-  logout: () => Promise<void>;
-}
-
-// ── Context ───────────────────────────────────────────────────────────────────
-
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// ── Provider ──────────────────────────────────────────────────────────────────
-
-export function AuthProvider({ children }: { children: React.ReactNode }) {
+export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Restore session from AsyncStorage on app start
+  // Restore user from AsyncStorage on app start
   useEffect(() => {
-    (async () => {
-      try {
-        const [storedToken, storedUser] = await Promise.all([
-          AsyncStorage.getItem(STORAGE_KEYS.AUTH_TOKEN),
-          AsyncStorage.getItem(STORAGE_KEYS.USER),
-        ]);
-        if (storedToken && storedUser) {
-          setToken(storedToken);
-          setUser(JSON.parse(storedUser));
-        }
-      } catch (e) {
-        console.warn("Failed to restore auth session", e);
-      } finally {
-        setIsLoading(false);
+    loadUser();
+  }, []);
+
+  const loadUser = async () => {
+    try {
+      const storedUser = await AsyncStorage.getItem("user");
+
+      if (storedUser) {
+        setUser(JSON.parse(storedUser));
       }
-    })();
-  }, []);
-
-  // ── Persist helpers ────────────────────────────────────────────────────────
-
-  const persist = async (u: User, t: string) => {
-    await Promise.all([
-      AsyncStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, t),
-      AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(u)),
-    ]);
-    setUser(u);
-    setToken(t);
+    } catch (error) {
+      console.log("Auth restore error:", error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const clear = async () => {
-    await Promise.all([
-      AsyncStorage.removeItem(STORAGE_KEYS.AUTH_TOKEN),
-      AsyncStorage.removeItem(STORAGE_KEYS.USER),
-    ]);
-    setUser(null);
-    setToken(null);
+  const login = async (data: LoginData) => {
+    try {
+      await AsyncStorage.setItem("user", JSON.stringify(data.user));
+
+      await AsyncStorage.setItem("token", data.token);
+
+      setUser(data.user);
+    } catch (error) {
+      console.log("Login error:", error);
+    }
   };
 
-  // ── Actions ────────────────────────────────────────────────────────────────
+  const logout = async () => {
+    try {
+      await AsyncStorage.removeItem("user");
+      await AsyncStorage.removeItem("token");
 
-  const login = useCallback(async (payload: LoginPayload) => {
-   // const { user: u, token: t } = await apiLogin(payload);
-    //await persist(u, t);
-  }, []);
-
-  const register = useCallback(async (payload: RegisterPayload) => {
-  //  const { user: u, token: t } = await apiRegister(payload);
-  //  await persist(u, t);
-  }, []);
-
-  const logout = useCallback(async () => {
-    await clear();
-  }, []);
-
-  // ── Value ──────────────────────────────────────────────────────────────────
+      setUser(null);
+    } catch (error) {
+      console.log("Logout error:", error);
+    }
+  };
 
   return (
     <AuthContext.Provider
       value={{
         user,
-        token,
-        isLoading,
-        isLoggedIn: !!user && !!token,
         login,
-        register,
         logout,
+        isLoading,
+        isLoggedIn: !!user,
       }}
     >
       {children}
     </AuthContext.Provider>
   );
-}
+};
 
-// ── Hook ──────────────────────────────────────────────────────────────────────
+export const useAuth = (): AuthContextType => {
+  const context = useContext(AuthContext);
 
-export function useAuth() {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth must be used within AuthProvider");
-  return ctx;
-}
-*/
+  if (!context) {
+    throw new Error("useAuth must be used within AuthProvider");
+  }
+
+  return context;
+};

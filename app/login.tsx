@@ -14,7 +14,9 @@ import {
   View,
 } from "react-native";
 import ThemeToggle from "../components/ThemeToggle";
+import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
+import { loginUser } from "../services/authService";
 
 export default function LoginScreen() {
   const { colors, isDark } = useTheme();
@@ -24,6 +26,20 @@ export default function LoginScreen() {
   const [remember, setRemember] = useState(false);
 
   const s = makeStyles(colors);
+
+  const { login } = useAuth();
+
+  const handleLogin = async () => {
+    try {
+      const data = await loginUser(email, password);
+
+      await login(data);
+
+      router.replace("/");
+    } catch (err: any) {
+      alert(err?.response?.data?.message || "Login failed");
+    }
+  };
 
   return (
     <SafeAreaView style={s.safe}>
@@ -157,7 +173,7 @@ export default function LoginScreen() {
 
             <TouchableOpacity
               style={[s.loginBtn, { backgroundColor: colors.brandDark }]}
-              onPress={() => router.replace("/")}
+              onPress={handleLogin}
             >
               <Text style={s.loginBtnText}>Login →</Text>
             </TouchableOpacity>

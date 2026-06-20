@@ -1,6 +1,8 @@
 // app/profile.tsx  — Profile Screen
 import { router } from "expo-router";
 import React from "react";
+
+import { useAuth } from "@/context/AuthContext";
 import {
   SafeAreaView,
   ScrollView,
@@ -24,6 +26,17 @@ const MENU_ITEMS = [
 export default function ProfileScreen() {
   const { colors, isDark } = useTheme();
   const s = makeStyles(colors);
+
+  const { logout } = useAuth();
+
+  <TouchableOpacity
+    onPress={async () => {
+      await logout();
+      router.replace("/login");
+    }}
+  >
+    <Text>Logout</Text>
+  </TouchableOpacity>;
 
   return (
     <SafeAreaView style={s.safe}>

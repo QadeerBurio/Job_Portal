@@ -14,6 +14,7 @@ import {
   View,
 } from "react-native";
 import ThemeToggle from "../components/ThemeToggle";
+import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 
 export default function SignupScreen() {
@@ -25,6 +26,46 @@ export default function SignupScreen() {
   const [agreed, setAgreed] = useState(false);
 
   const s = makeStyles(colors);
+
+  const { login } = useAuth();
+
+  const handleSignup = async () => {
+    try {
+      if (!name || !email || !password) {
+        alert("Please fill all fields");
+        return;
+      }
+
+      const response = await fetch(
+        "http://192.168.100.4:5000/api/auth/register",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            name,
+            email,
+            password,
+          }),
+        },
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        alert(data.message || "Registration failed");
+        return;
+      }
+
+      alert("Account created successfully");
+
+      router.replace("/login");
+    } catch (error) {
+      console.log(error);
+      alert("Something went wrong");
+    }
+  };
 
   return (
     <SafeAreaView style={s.safe}>
@@ -164,7 +205,7 @@ export default function SignupScreen() {
                 },
               ]}
               disabled={!agreed}
-              onPress={() => router.replace("/")}
+              onPress={handleSignup}
             >
               <Text style={s.createBtnText}>Create Account</Text>
             </TouchableOpacity>
