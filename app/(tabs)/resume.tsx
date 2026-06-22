@@ -2,14 +2,15 @@
 // This is what shows when the user taps "Resume" in the tab bar.
 // It redirects to Work Experience by default (matches the screenshots),
 // with quick links to every other resume section.
+import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "../../context/ThemeContext";
@@ -19,39 +20,50 @@ const SECTIONS = [
   {
     key: "personal-info",
     label: "Personal Information",
-    icon: "👤",
+    icon: "person-circle-outline",
     route: "/resume/personal-info",
   },
   {
     key: "experience",
     label: "Work Experience",
-    icon: "💼",
+    icon: "briefcase-outline",
     route: "/resume/experience",
   },
   {
     key: "education",
     label: "Education",
-    icon: "🎓",
+    icon: "school-outline",
     route: "/resume/education",
   },
-  { key: "skills", label: "Skills", icon: "⚡", route: "/resume/skills" },
-  { key: "projects", label: "Projects", icon: "🗂️", route: "/resume/projects" },
+  {
+    key: "skills",
+    label: "Skills",
+    icon: "flash-outline",
+    route: "/resume/skills",
+  },
+
+  {
+    key: "projects",
+    label: "Projects",
+    icon: "folder-open-outline",
+    route: "/resume/projects",
+  },
   {
     key: "certifications",
     label: "Certifications",
-    icon: "🏅",
+    icon: "ribbon-outline",
     route: "/resume/certifications",
   },
   {
     key: "templates",
     label: "Resume Templates",
-    icon: "📄",
+    icon: "document-text-outline",
     route: "/resume/templates",
   },
   {
     key: "preview",
     label: "Preview & Download",
-    icon: "👁️",
+    icon: "eye-outline",
     route: "/resume/preview",
   },
 ];
@@ -100,7 +112,12 @@ export default function ResumeHubScreen() {
               onPress={() => router.push(sec.route as any)}
               activeOpacity={0.8}
             >
-              <Text style={s.cardIcon}>{sec.icon}</Text>
+              <Ionicons
+                name={sec.icon as any}
+                size={30}
+                color={colors.brand}
+                style={{ marginBottom: 10 }}
+              />
               <Text style={[s.cardLabel, { color: colors.textPrimary }]}>
                 {sec.label}
               </Text>

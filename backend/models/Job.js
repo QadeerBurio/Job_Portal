@@ -126,6 +126,9 @@ const JobSchema = new mongoose.Schema(
       type: String,
       default: "apify",
     },
+    lastSyncedAt: {
+      type: Date,
+    },
   },
   {
     timestamps: true,

@@ -5,6 +5,8 @@ const fetchJobs = require("./apifyService");
 const transformJobs = require("./transformJobs");
 
 async function syncJobs() {
+  const syncStartedAt = new Date();
+
   try {
     const rawJobs = await fetchJobs();
 
@@ -18,7 +20,11 @@ async function syncJobs() {
           applyUrl: job.applyUrl,
         },
         {
-          $set: job,
+          $set: {
+            ...job,
+            isActive: true,
+            lastSyncedAt: syncStartedAt,
+          },
         },
         {
           upsert: true,
@@ -27,6 +33,19 @@ async function syncJobs() {
     }
 
     console.log(`${jobs.length} jobs synced`);
+
+    // Anything not touched in this sync run is stale — deactivate it
+    const sweepResult = await Job.updateMany(
+      {
+        lastSyncedAt: { $lt: syncStartedAt },
+        isActive: true,
+      },
+      {
+        $set: { isActive: false },
+      },
+    );
+
+    console.log(`${sweepResult.modifiedCount} stale jobs marked inactive`);
   } catch (error) {
     console.error("Sync Error:", error.message);
   }

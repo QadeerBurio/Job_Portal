@@ -1,5 +1,4 @@
 // context/AuthContext.tsx
-
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, {
   createContext,
@@ -8,6 +7,7 @@ import React, {
   useEffect,
   useState,
 } from "react";
+import { STORAGE_KEYS } from "../constants/API"; // ← add this import
 
 interface User {
   id?: string;
@@ -34,15 +34,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Restore user from AsyncStorage on app start
   useEffect(() => {
     loadUser();
   }, []);
 
   const loadUser = async () => {
     try {
-      const storedUser = await AsyncStorage.getItem("user");
-
+      const storedUser = await AsyncStorage.getItem(STORAGE_KEYS.USER); // was "user"
       if (storedUser) {
         setUser(JSON.parse(storedUser));
       }
@@ -55,10 +53,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const login = async (data: LoginData) => {
     try {
-      await AsyncStorage.setItem("user", JSON.stringify(data.user));
-
-      await AsyncStorage.setItem("token", data.token);
-
+      await AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(data.user)); // was "user"
+      await AsyncStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, data.token); // was "token"
       setUser(data.user);
     } catch (error) {
       console.log("Login error:", error);
@@ -67,9 +63,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const logout = async () => {
     try {
-      await AsyncStorage.removeItem("user");
-      await AsyncStorage.removeItem("token");
-
+      await AsyncStorage.removeItem(STORAGE_KEYS.USER); // was "user"
+      await AsyncStorage.removeItem(STORAGE_KEYS.AUTH_TOKEN); // was "token"
       setUser(null);
     } catch (error) {
       console.log("Logout error:", error);
@@ -78,13 +73,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   return (
     <AuthContext.Provider
-      value={{
-        user,
-        login,
-        logout,
-        isLoading,
-        isLoggedIn: !!user,
-      }}
+      value={{ user, login, logout, isLoading, isLoggedIn: !!user }}
     >
       {children}
     </AuthContext.Provider>
@@ -93,10 +82,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
 export const useAuth = (): AuthContextType => {
   const context = useContext(AuthContext);
-
   if (!context) {
     throw new Error("useAuth must be used within AuthProvider");
   }
-
   return context;
 };

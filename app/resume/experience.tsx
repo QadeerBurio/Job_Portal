@@ -1,13 +1,13 @@
 // app/resume/experience.tsx — Work Experience Screen
-import { router } from "expo-router";
-import React, { useCallback, useEffect, useState } from "react";
+import { router, useFocusEffect } from "expo-router";
+import React, { useCallback, useState } from "react";
 import {
-    Alert,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "../../context/ThemeContext";
@@ -43,11 +43,11 @@ export default function WorkExperienceScreen() {
       .catch((err) => Alert.alert("Error", err.message))
       .finally(() => setLoading(false));
   }, []);
-
-  useEffect(() => {
-    load();
-  }, [load]);
-
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load]),
+  );
   const handleDelete = (id: string, title: string) => {
     Alert.alert("Delete Experience", `Remove "${title}" from your resume?`, [
       { text: "Cancel", style: "cancel" },

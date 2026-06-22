@@ -27,16 +27,12 @@ export default function ProfileScreen() {
   const { colors, isDark } = useTheme();
   const s = makeStyles(colors);
 
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
 
-  <TouchableOpacity
-    onPress={async () => {
-      await logout();
-      router.replace("/login");
-    }}
-  >
-    <Text>Logout</Text>
-  </TouchableOpacity>;
+  const handleLogout = async () => {
+    await logout();
+    router.replace("/login");
+  };
 
   return (
     <SafeAreaView style={s.safe}>
@@ -58,7 +54,9 @@ export default function ProfileScreen() {
         <View style={s.avatarSection}>
           <View style={s.avatarWrapper}>
             <View style={[s.avatar, { backgroundColor: colors.brand }]}>
-              <Text style={s.avatarInitial}>A</Text>
+              <Text style={s.avatarInitial}>
+                {user?.name ? user.name.charAt(0).toUpperCase() : "?"}
+              </Text>
             </View>
             <TouchableOpacity
               style={[s.editBadge, { backgroundColor: colors.brand }]}
@@ -66,9 +64,11 @@ export default function ProfileScreen() {
               <Text style={{ color: "#fff", fontSize: 12 }}>✏️</Text>
             </TouchableOpacity>
           </View>
-          <Text style={[s.name, { color: colors.textPrimary }]}>Ahmed Ali</Text>
+          <Text style={[s.name, { color: colors.textPrimary }]}>
+            {user?.name || "Guest User"}
+          </Text>
           <Text style={[s.jobTitle, { color: colors.textSecondary }]}>
-            Software Developer
+            {user?.email || "No email on file"}
           </Text>
           <View style={s.badges}>
             <View style={[s.greenBadge]}>
@@ -152,10 +152,7 @@ export default function ProfileScreen() {
         </View>
 
         {/* Log out */}
-        <TouchableOpacity
-          style={s.logoutRow}
-          onPress={() => router.replace("/login")}
-        >
+        <TouchableOpacity style={s.logoutRow} onPress={handleLogout}>
           <Text style={{ fontSize: 18 }}>🚪</Text>
           <Text style={s.logoutText}>Log out</Text>
         </TouchableOpacity>

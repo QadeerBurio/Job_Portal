@@ -2,21 +2,21 @@
 import { router } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
 import {
-    Alert,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "../../context/ThemeContext";
 import {
-    addSkill,
-    deleteSkill,
-    fetchResume,
-    fetchSkillSuggestions,
+  addSkill,
+  deleteSkill,
+  fetchResume,
+  fetchSkillSuggestions,
 } from "../../services/resumeService";
 import { Skill } from "../../types/resume";
 

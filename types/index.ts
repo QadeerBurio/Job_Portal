@@ -59,6 +59,7 @@ export type User = {
   appliedCount: number;
   interviewCount: number;
   savedJobIds?: string[];
+  token?: string;
 };
 
 // Add these to your types/index.ts
@@ -86,9 +87,7 @@ export type FilterState = {
 export interface AuthResponse {
   success: boolean;
   message: string;
-  data?: {
-    user: User;
-    token: string;
-  };
+  user: User;
+  token: string;
   error?: string;
 }

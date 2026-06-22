@@ -1,29 +1,57 @@
 // backend/routes/resumeRoutes.js
 // ─────────────────────────────────────────────────────────────────────────────
-// All resume-related endpoints. Mount in server.js with:
-//   app.use("/api/resume", require("./routes/resumeRoutes"));
+// Full Resume Builder + ATS matching API.
 //
-// Auth: expects req.userId to be set by an auth middleware (JWT decode).
-// For now, a simple stub middleware is included — swap with real JWT auth.
+// AUTH NOTE: This expects your authRoutes.js to issue a JWT on login/register
+// that's verifiable with process.env.JWT_SECRET, and that the JWT payload
+// contains a `userId` (or `id` / `_id` — all three are checked below).
+//
+// If your authRoutes.js uses a different JWT payload shape, open the
+// requireAuth function below and adjust the `decoded.userId ?? decoded.id ...`
+// line to match your actual token payload field name.
 // ─────────────────────────────────────────────────────────────────────────────
 const express = require("express");
+const jwt = require("jsonwebtoken");
 const router = express.Router();
-const Resume = require("../models/Resume");
-const Job = require("../models/Job"); // your existing Job model
-const { calculateAtsScore } = require("../utils/atsScore");
-const { getMatchedJobs } = require("../utils/jobMatcher");
 
-// ── Stub auth middleware — REPLACE with real JWT verification ────────────────
+const Resume = require("../models/Resume");
+const Job = require("../models/Job");
+const { matchResumeToJobs } = require("../utils/Atsmatcher");
+const { calculateCompletion } = require("../utils/completion");
+
+// ════════════════════════════════════════════════════════════════════════════
+// AUTH MIDDLEWARE — verifies JWT from Authorization header
+// ════════════════════════════════════════════════════════════════════════════
 function requireAuth(req, res, next) {
-  // In production: verify JWT from Authorization header, set req.userId
-  const userId = req.headers["x-user-id"]; // temporary — pass userId in header for testing
-  if (!userId)
-    return res.status(401).json({ error: "Unauthorized — missing user ID" });
-  req.userId = userId;
-  next();
+  const authHeader = req.headers.authorization;
+  const token = authHeader?.startsWith("Bearer ")
+    ? authHeader.slice(7)
+    : authHeader;
+
+  if (!token) {
+    return res.status(401).json({ error: "Unauthorized — no token provided" });
+  }
+
+  // ✅ MUST match authController.js exactly:
+  // jwt.sign({ id }, process.env.JWT_SECRET || "karachijobs_secret", ...)
+  const secret = process.env.JWT_SECRET || "karachijobs_secret";
+
+  try {
+    const decoded = jwt.verify(token, secret);
+    // Support whichever field name your authRoutes.js puts the user ID under
+    req.userId = decoded.id ?? decoded.userId ?? decoded._id;
+    if (!req.userId) {
+      return res
+        .status(401)
+        .json({ error: "Invalid token payload — no user ID found" });
+    }
+    next();
+  } catch (err) {
+    return res.status(401).json({ error: "Invalid or expired token" });
+  }
 }
 
-// ── Helper: get or create resume for a user ───────────────────────────────────
+// ── Helper: get or create resume for a user (1:1 relationship) ────────────────
 async function getOrCreateResume(userId) {
   let resume = await Resume.findOne({ userId });
   if (!resume) {
@@ -38,14 +66,26 @@ async function getOrCreateResume(userId) {
 router.get("/", requireAuth, async (req, res) => {
   try {
     const resume = await getOrCreateResume(req.userId);
-    res.json(resume);
+
+    // completionPercent powers the "Resume Strength" bar on resume.tsx —
+    // a presence check (did you fill the section), not an ATS quality score.
+    const { completionPercent, sections } = calculateCompletion(
+      resume.toObject(),
+    );
+
+    res.json({
+      ...resume.toObject(),
+      completionPercent,
+      completionSections: sections,
+    });
   } catch (err) {
+    console.error("GET /api/resume error:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-// PUT /api/resume/personal-info — update Personal Information screen
+// PUT /api/resume/personal-info
 // ════════════════════════════════════════════════════════════════════════════
 router.put("/personal-info", requireAuth, async (req, res) => {
   try {
@@ -59,7 +99,7 @@ router.put("/personal-info", requireAuth, async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-// EDUCATION — full CRUD
+// EDUCATION
 // ════════════════════════════════════════════════════════════════════════════
 router.post("/education", requireAuth, async (req, res) => {
   try {
@@ -98,20 +138,18 @@ router.delete("/education/:eduId", requireAuth, async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-// EXPERIENCE — full CRUD
+// EXPERIENCE
 // ════════════════════════════════════════════════════════════════════════════
 router.post("/experience", requireAuth, async (req, res) => {
   try {
     const resume = await getOrCreateResume(req.userId);
-
-    // Auto-parse bullets from description (split by newline or period)
     const bullets = (req.body.description || "")
       .split(/\n|(?<=\.)\s+/)
       .map((s) => s.trim())
       .filter((s) => s.length > 10);
-
-    resume.experience.unshift({ ...req.body, bullets }); // newest first
+    resume.experience.unshift({ ...req.body, bullets });
     await resume.save();
+    await recalculateAtsScore(resume);
     res.status(201).json(resume.experience[0]);
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -132,6 +170,7 @@ router.put("/experience/:expId", requireAuth, async (req, res) => {
         .filter((s) => s.length > 10);
     }
     await resume.save();
+    await recalculateAtsScore(resume);
     res.json(exp);
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -150,19 +189,16 @@ router.delete("/experience/:expId", requireAuth, async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-// SKILLS — add / remove
+// SKILLS
 // ════════════════════════════════════════════════════════════════════════════
 router.post("/skills", requireAuth, async (req, res) => {
   try {
     const resume = await getOrCreateResume(req.userId);
     const { name, type = "technical" } = req.body;
-
-    // Prevent duplicates (case-insensitive)
     const exists = resume.skills.some(
       (s) => s.name.toLowerCase() === name.toLowerCase(),
     );
     if (exists) return res.status(409).json({ error: "Skill already added" });
-
     resume.skills.push({ name, type });
     await resume.save();
     res.status(201).json(resume.skills);
@@ -182,7 +218,6 @@ router.delete("/skills/:skillId", requireAuth, async (req, res) => {
   }
 });
 
-// Skill suggestions based on existing skills + popular Karachi market skills
 router.get("/skills/suggestions", requireAuth, async (req, res) => {
   const POPULAR_SKILLS = [
     "JavaScript",
@@ -213,7 +248,7 @@ router.get("/skills/suggestions", requireAuth, async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-// PROJECTS — full CRUD
+// PROJECTS
 // ════════════════════════════════════════════════════════════════════════════
 router.post("/projects", requireAuth, async (req, res) => {
   try {
@@ -251,7 +286,7 @@ router.delete("/projects/:projectId", requireAuth, async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-// CERTIFICATIONS — full CRUD
+// CERTIFICATIONS
 // ════════════════════════════════════════════════════════════════════════════
 router.post("/certifications", requireAuth, async (req, res) => {
   try {
@@ -290,7 +325,7 @@ router.delete("/certifications/:certId", requireAuth, async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-// TEMPLATE selection
+// TEMPLATE
 // ════════════════════════════════════════════════════════════════════════════
 router.put("/template", requireAuth, async (req, res) => {
   try {
@@ -304,7 +339,6 @@ router.put("/template", requireAuth, async (req, res) => {
 });
 
 router.get("/templates", async (req, res) => {
-  // Static list — could be moved to DB if you add more templates later
   res.json([
     {
       _id: "simple-ats",
@@ -324,14 +358,22 @@ router.get("/templates", async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-// ATS SCORE — calculate and return
+// ATS SCORE — real keyword + structure based scoring (see utils/Atsscore.js)
 // ════════════════════════════════════════════════════════════════════════════
+const { calculateAtsScore } = require("../utils/Atsscore");
+
+async function recalculateAtsScore(resume) {
+  const result = calculateAtsScore(resume.toObject());
+  resume.atsScore = result.total;
+  resume.lastScoredAt = new Date();
+  await resume.save();
+  return result;
+}
+
 router.get("/ats-score", requireAuth, async (req, res) => {
   try {
     const resume = await getOrCreateResume(req.userId);
-    const result = calculateAtsScore(resume.toObject());
-    resume.atsScore = result.total;
-    await resume.save();
+    const result = await recalculateAtsScore(resume);
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -339,13 +381,36 @@ router.get("/ats-score", requireAuth, async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-// MATCHED JOBS — "Jobs Recommended For You" screen
+// MATCHED JOBS — real ATS-style resume-to-job matching
 // ════════════════════════════════════════════════════════════════════════════
 router.get("/matched-jobs", requireAuth, async (req, res) => {
   try {
     const resume = await getOrCreateResume(req.userId);
-    const matches = await getMatchedJobs(resume.toObject(), Job, 10);
+    const limit = Number(req.query.limit) || 10;
+    const minScore = Number(req.query.minScore) || 0;
+
+    const matches = await matchResumeToJobs(resume.toObject(), Job, limit);
     res.json(matches);
+  } catch (err) {
+    console.error("GET /api/resume/matched-jobs error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GET /api/resume/match-score/:jobId — score against ONE specific job ───────
+// Useful for showing match % on a single job detail screen.
+router.get("/match-score/:jobId", requireAuth, async (req, res) => {
+  try {
+    const resume = await getOrCreateResume(req.userId);
+    const job = await Job.findById(req.params.jobId).lean();
+    if (!job) return res.status(404).json({ error: "Job not found" });
+
+    const { scoreResumeAgainstJob } = require("../utils/Atsmatcher");
+    const result = {
+      score: scoreResumeAgainstJob(resume.toObject(), job),
+      job: job._id,
+    };
+    res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

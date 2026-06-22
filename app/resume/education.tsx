@@ -1,13 +1,13 @@
 // app/resume/education.tsx — Education Screen
-import { router } from "expo-router";
-import React, { useCallback, useEffect, useState } from "react";
+import { router, useFocusEffect } from "expo-router";
+import React, { useCallback, useState } from "react";
 import {
-    Alert,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "../../context/ThemeContext";
@@ -38,10 +38,11 @@ export default function EducationScreen() {
       .finally(() => setLoading(false));
   }, []);
 
-  useEffect(() => {
-    load();
-  }, [load]);
-
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load]),
+  );
   const handleDelete = (id: string, degree: string) => {
     Alert.alert("Delete Education", `Remove "${degree}"?`, [
       { text: "Cancel", style: "cancel" },

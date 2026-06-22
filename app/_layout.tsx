@@ -6,7 +6,12 @@ import { AuthProvider, useAuth } from "../context/AuthContext";
 import { ThemeProvider } from "../context/ThemeContext";
 
 function RootNavigator() {
-  const { user } = useAuth();
+  const { user, isLoading } = useAuth();
+
+  if (isLoading) {
+    // AsyncStorage is still being read — render nothing (or a splash/spinner) for this brief moment
+    return null;
+  }
 
   return (
     <Stack screenOptions={{ headerShown: false }}>

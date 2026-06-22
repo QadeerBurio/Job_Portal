@@ -2,12 +2,12 @@
 import { router } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
 import {
-    Alert,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "../../context/ThemeContext";
@@ -44,7 +44,17 @@ export default function ProjectsScreen() {
   const load = useCallback(() => {
     setLoading(true);
     fetchResume()
-      .then((r) => setProjects(r.projects))
+      .then((r) => {
+        console.log("PROJECTS DATA:", JSON.stringify(r.projects, null, 2));
+
+        setProjects(
+          r.projects.map((p: any) => ({
+            ...p,
+            name: p.name || p.title || "",
+            technologies: p.technologies || p.techStack || [],
+          })),
+        );
+      })
       .catch((e) => Alert.alert("Error", e.message))
       .finally(() => setLoading(false));
   }, []);
@@ -158,9 +168,9 @@ export default function ProjectsScreen() {
               {project.description}
             </Text>
 
-            {project.technologies.length > 0 && (
+            {(project.technologies ?? []).length > 0 && (
               <View style={s.techRow}>
-                {project.technologies.map((tech) => (
+                {(project.technologies ?? []).map((tech) => (
                   <View
                     key={tech}
                     style={[s.techChip, { backgroundColor: colors.bgTertiary }]}

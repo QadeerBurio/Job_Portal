@@ -11,6 +11,7 @@ const authRoutes = require("./routes/authRoutes");
 
 const syncJobs = require("./services/syncJobs");
 const Job = require("./models/Job");
+const resumeRoutes = require("./routes/resumeRoutes");
 
 if (!process.env.MONGODB_URI) {
   console.error("❌ MONGODB_URI missing from .env");
@@ -23,6 +24,8 @@ app.use(cors());
 app.use(express.json());
 
 app.use("/api/auth", authRoutes);
+// ...
+app.use("/api/resume", resumeRoutes);
 
 mongoose
   .connect(process.env.MONGODB_URI)
@@ -104,7 +107,10 @@ app.get("/api/jobs", async (req, res) => {
       limit = 500,
     } = req.query;
 
-    const filter = {};
+    const filter = {
+      isActive: true,
+      expiresAt: { $gte: new Date() },
+    };
 
     if (q) {
       filter.$or = [
