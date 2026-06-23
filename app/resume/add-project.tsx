@@ -1,4 +1,5 @@
 // app/resume/add-project.tsx — Project Details Form
+import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useState } from "react";
 import {
@@ -70,12 +71,14 @@ export default function AddProjectScreen() {
     <SafeAreaView style={s.safe} edges={["top"]}>
       <View style={s.header}>
         <TouchableOpacity onPress={() => router.back()}>
-          <Text style={[s.backArrow, { color: colors.textPrimary }]}>←</Text>
+          <Ionicons name="arrow-back" size={20} color={colors.text} />
         </TouchableOpacity>
         <Text style={[s.headerTitle, { color: colors.textPrimary }]}>
           Project Details
         </Text>
-        <Text style={{ fontSize: 18, color: colors.textTertiary }}>👤</Text>
+        <Text style={{ fontSize: 18, color: colors.textTertiary }}>
+          <Ionicons name="folder-open" size={20} color={colors.brand} />
+        </Text>
       </View>
 
       <ScrollView

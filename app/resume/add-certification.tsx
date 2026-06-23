@@ -1,23 +1,24 @@
 // app/resume/add-certification.tsx — Add Certification Form
+import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import * as DocumentPicker from "expo-document-picker";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useState } from "react";
 import {
-    Alert,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Alert,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "../../context/ThemeContext";
 import {
-    addCertification,
-    updateCertification,
+  addCertification,
+  updateCertification,
 } from "../../services/resumeService";
 
 export default function AddCertificationScreen() {
@@ -91,12 +92,14 @@ export default function AddCertificationScreen() {
     <SafeAreaView style={s.safe} edges={["top"]}>
       <View style={s.header}>
         <TouchableOpacity onPress={() => router.back()}>
-          <Text style={[s.backArrow, { color: colors.textPrimary }]}>←</Text>
+          <Ionicons name="arrow-back" size={20} color={colors.text} />
         </TouchableOpacity>
         <Text style={[s.headerTitle, { color: colors.textPrimary }]}>
           Add Certification
         </Text>
-        <Text style={{ fontSize: 18 }}>🏅</Text>
+        <Text style={{ fontSize: 18 }}>
+          <Ionicons name="ribbon" size={20} color={colors.brand} />
+        </Text>
       </View>
 
       <ScrollView

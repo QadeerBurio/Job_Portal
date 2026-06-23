@@ -1,4 +1,5 @@
 // app/resume/add-experience.tsx — Add Experience Form (Step 2 of 4)
+import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useState } from "react";
@@ -88,7 +89,7 @@ export default function AddExperienceScreen() {
       {/* Header */}
       <View style={s.header}>
         <TouchableOpacity onPress={() => router.back()}>
-          <Text style={[s.backArrow, { color: colors.textPrimary }]}>←</Text>
+          <Ionicons name="arrow-back" size={20} color={colors.text} />
         </TouchableOpacity>
         <Text style={[s.headerTitle, { color: colors.textPrimary }]}>
           Add Experience

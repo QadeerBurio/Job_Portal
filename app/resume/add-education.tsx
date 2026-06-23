@@ -1,4 +1,5 @@
 // app/resume/add-education.tsx — Add Education Form
+import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useState } from "react";
@@ -72,7 +73,7 @@ export default function AddEducationScreen() {
     <SafeAreaView style={s.safe} edges={["top"]}>
       <View style={s.header}>
         <TouchableOpacity onPress={() => router.back()}>
-          <Text style={[s.backArrow, { color: colors.textPrimary }]}>←</Text>
+          <Ionicons name="arrow-back" size={20} color={colors.text} />
         </TouchableOpacity>
         <Text style={[s.headerTitle, { color: colors.textPrimary }]}>
           Add Education

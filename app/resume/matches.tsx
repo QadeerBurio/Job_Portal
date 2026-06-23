@@ -1,4 +1,6 @@
 // app/resume/matches.tsx — "Resume Complete! Jobs Recommended" Screen
+import ThemeToggle from "@/components/ThemeToggle";
+import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
@@ -34,12 +36,14 @@ export default function MatchesScreen() {
     <SafeAreaView style={s.safe} edges={["top"]}>
       <View style={s.header}>
         <View style={[s.avatar, { backgroundColor: colors.brand }]}>
-          <Text style={{ color: "#fff" }}>👤</Text>
+          <Text style={{ color: "#fff" }}>
+            <Ionicons name="briefcase" size={20} color={colors.text} />
+          </Text>
         </View>
         <Text style={[s.headerTitle, { color: colors.textPrimary }]}>
           KarachiJobs
         </Text>
-        <Text style={{ fontSize: 18 }}>🔔</Text>
+        <ThemeToggle />
       </View>
 
       <ScrollView
