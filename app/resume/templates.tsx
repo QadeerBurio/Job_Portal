@@ -1,5 +1,6 @@
 // app/resume/templates.tsx — Resume Templates Screen
 // 3 real templates with live preview of user's actual data
+import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
@@ -276,7 +277,7 @@ export default function TemplatesScreen() {
     <SafeAreaView style={s.safe} edges={["top"]}>
       <View style={s.header}>
         <TouchableOpacity onPress={() => router.back()}>
-          <Text style={[s.back, { color: colors.textPrimary }]}>←</Text>
+          <Ionicons name="arrow-back" size={20} color={colors.text} />
         </TouchableOpacity>
         <Text style={[s.headerTitle, { color: colors.textPrimary }]}>
           Resume Templates

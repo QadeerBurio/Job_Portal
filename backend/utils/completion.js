@@ -1,84 +1,89 @@
 // backend/utils/completion.js
 // ─────────────────────────────────────────────────────────────────────────────
-// Resume COMPLETION % — "have you filled this section in at all?"
-// This is intentionally separate from atsScore.js, which grades QUALITY
-// (action verbs, quantified metrics, link presence). A resume can be 100%
-// complete here while still scoring low on ATS quality, and vice versa.
+// Resume COMPLETION % — tracks whether each section has been filled in.
+// Called as a virtual on the Resume model (always live) and also by the
+// GET /api/resume endpoint so the frontend progress bar is always accurate.
 //
-// Weights mirror the section list on the Resume Hub screen (resume.tsx):
-// Personal Info, Experience, Education, Skills, Projects, Certifications,
-// Template chosen. Certifications/Projects are optional in real resumes,
-// so they carry less weight than the core sections.
+// Weights (total = 100):
+//   Personal Info  25 — proportional to how many of the 5 core fields are filled
+//   Experience     25 — at least 1 entry
+//   Education      20 — at least 1 entry
+//   Skills         15 — at least 3 skills
+//   Projects        5 — at least 1 project
+//   Certifications  5 — at least 1 certification
+//   Template        5 — user explicitly selected a template (not the default "")
 // ─────────────────────────────────────────────────────────────────────────────
 
 const WEIGHTS = {
-  personalInfo: 25, // core contact fields
-  experience: 25, // at least one entry
-  education: 20, // at least one entry
-  skills: 15, // at least 3 skills
-  projects: 5, // optional but nice to have
-  certifications: 5, // optional
-  template: 5, // user picked a template (not still default)
+  personalInfo: 25,
+  experience: 25,
+  education: 20,
+  skills: 15,
+  projects: 5,
+  certifications: 5,
+  template: 5,
 };
 
 function calculateCompletion(resume) {
   let percent = 0;
   const sections = {};
 
-  // ── Personal Information ──────────────────────────────────────────────
-  // Counts as "filled" only once the core identity + contact fields exist —
-  // matches what the Personal Information screen actually asks for.
+  // ── Personal Information ──────────────────────────────────────────────────
+  // Score is proportional — each filled field adds (25 / 5) = 5 points
   const pi = resume.personalInfo ?? {};
-  const piFields = ["fullName", "email", "phone", "city", "summary"];
-  const piFilled = piFields.filter(
+  const coreFields = ["fullName", "email", "phone", "city", "summary"];
+  const filled = coreFields.filter(
     (f) => (pi[f] ?? "").toString().trim().length > 0,
   ).length;
-  const piScore = Math.round(
-    (piFilled / piFields.length) * WEIGHTS.personalInfo,
+  sections.personalInfo = Math.round(
+    (filled / coreFields.length) * WEIGHTS.personalInfo,
   );
-  sections.personalInfo = piScore;
-  percent += piScore;
+  percent += sections.personalInfo;
 
-  // ── Experience ───────────────────────────────────────────────────────
+  // ── Experience ────────────────────────────────────────────────────────────
   const experience = resume.experience ?? [];
-  sections.experience = experience.length > 0 ? WEIGHTS.experience : 0;
+  sections.experience = experience.length >= 1 ? WEIGHTS.experience : 0;
   percent += sections.experience;
 
-  // ── Education ────────────────────────────────────────────────────────
+  // ── Education ─────────────────────────────────────────────────────────────
   const education = resume.education ?? [];
-  sections.education = education.length > 0 ? WEIGHTS.education : 0;
+  sections.education = education.length >= 1 ? WEIGHTS.education : 0;
   percent += sections.education;
 
-  // ── Skills ───────────────────────────────────────────────────────────
+  // ── Skills ────────────────────────────────────────────────────────────────
+  // Partial credit: 1-2 skills = half marks, 3+ = full marks
   const skills = resume.skills ?? [];
-  let skillScore = 0;
-  if (skills.length >= 1) skillScore = WEIGHTS.skills * 0.5;
-  if (skills.length >= 3) skillScore = WEIGHTS.skills;
-  sections.skills = Math.round(skillScore);
+  if (skills.length >= 3) sections.skills = WEIGHTS.skills;
+  else if (skills.length >= 1)
+    sections.skills = Math.round(WEIGHTS.skills * 0.5);
+  else sections.skills = 0;
   percent += sections.skills;
 
-  // ── Projects (optional) ──────────────────────────────────────────────
+  // ── Projects ──────────────────────────────────────────────────────────────
   const projects = resume.projects ?? [];
-  sections.projects = projects.length > 0 ? WEIGHTS.projects : 0;
+  sections.projects = projects.length >= 1 ? WEIGHTS.projects : 0;
   percent += sections.projects;
 
-  // ── Certifications (optional) ────────────────────────────────────────
+  // ── Certifications ────────────────────────────────────────────────────────
   const certifications = resume.certifications ?? [];
   sections.certifications =
-    certifications.length > 0 ? WEIGHTS.certifications : 0;
+    certifications.length >= 1 ? WEIGHTS.certifications : 0;
   percent += sections.certifications;
 
-  // ── Template chosen ──────────────────────────────────────────────────
-  // "simple-ats" is the schema default, so only count it once the user has
-  // actually visited the Templates screen and saved a choice. If you'd
-  // rather treat the default as a valid pick, just delete this block and
-  // always award WEIGHTS.template.
-  sections.template = resume.templateId ? WEIGHTS.template : 0;
+  // ── Template ──────────────────────────────────────────────────────────────
+  // ✅ FIX: templateId defaults to "" in the schema (not "simple-ats")
+  // so this correctly returns 0 until the user visits Templates and saves.
+  // "simple-ats" is only set when the user explicitly selects it.
+  const hasChosen = resume.templateId && resume.templateId.trim().length > 0;
+  sections.template = hasChosen ? WEIGHTS.template : 0;
   percent += sections.template;
 
   return {
     completionPercent: Math.min(Math.round(percent), 100),
-    sections, // exposed in case you want a per-section breakdown bar later
+    sections, // per-section breakdown — useful for a future progress detail screen
+    missing: Object.entries(sections)
+      .filter(([, v]) => v === 0)
+      .map(([k]) => k), // list of incomplete section names
   };
 }
 

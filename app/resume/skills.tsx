@@ -1,4 +1,5 @@
 // app/resume/skills.tsx — Skills Screen
+import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
 import {
@@ -81,13 +82,15 @@ export default function SkillsScreen() {
     <SafeAreaView style={s.safe} edges={["top"]}>
       <View style={s.header}>
         <TouchableOpacity onPress={() => router.back()}>
-          <Text style={[s.backArrow, { color: colors.textPrimary }]}>←</Text>
+          <Ionicons name="arrow-back" size={20} color={colors.text} />
         </TouchableOpacity>
         <Text style={[s.headerTitle, { color: colors.textPrimary }]}>
           Skills
         </Text>
         <View style={[s.avatar, { backgroundColor: colors.brand }]}>
-          <Text style={{ color: "#fff" }}>👤</Text>
+          <Text style={{ color: "#fff" }}>
+            <Ionicons name="flash" size={20} color={colors.text} />
+          </Text>
         </View>
       </View>
 

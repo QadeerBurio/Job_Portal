@@ -1,4 +1,5 @@
 // app/resume/education.tsx — Education Screen
+import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
 import React, { useCallback, useState } from "react";
 import {
@@ -67,13 +68,15 @@ export default function EducationScreen() {
     <SafeAreaView style={s.safe} edges={["top"]}>
       <View style={s.header}>
         <TouchableOpacity onPress={() => router.back()}>
-          <Text style={[s.backArrow, { color: colors.textPrimary }]}>←</Text>
+          <Ionicons name="arrow-back" size={20} color={colors.text} />
         </TouchableOpacity>
         <Text style={[s.headerTitle, { color: colors.textPrimary }]}>
           Education
         </Text>
         <View style={[s.avatar, { backgroundColor: colors.brand }]}>
-          <Text style={{ color: "#fff", fontWeight: "700" }}>A</Text>
+          <Text style={{ color: "#fff", fontWeight: "700" }}>
+            <Ionicons name="school" size={20} color={colors.text} />
+          </Text>
         </View>
       </View>
 
@@ -144,13 +147,21 @@ export default function EducationScreen() {
                     })
                   }
                 >
-                  <Text style={s.editIcon}>✏️</Text>
+                  <Text style={s.editIcon}>
+                    <Ionicons
+                      name="pencil-outline"
+                      size={20}
+                      color={colors.brand}
+                    />
+                  </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   onPress={() => handleDelete(edu._id, edu.degree)}
                   style={{ marginTop: 12 }}
                 >
-                  <Text style={s.deleteIcon}>🗑️</Text>
+                  <Text style={s.deleteIcon}>
+                    <Ionicons name="trash-bin" size={20} color={colors.brand} />
+                  </Text>
                 </TouchableOpacity>
               </View>
             </View>

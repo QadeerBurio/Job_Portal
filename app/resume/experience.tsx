@@ -1,4 +1,5 @@
 // app/resume/experience.tsx — Work Experience Screen
+import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
 import React, { useCallback, useState } from "react";
 import {
@@ -45,8 +46,10 @@ export default function WorkExperienceScreen() {
   }, []);
   useFocusEffect(
     useCallback(() => {
-      load();
-    }, [load]),
+      fetchResume()
+        .then((r) => setCompletion(r.completionPercent ?? 0))
+        .catch(() => {});
+    }, []),
   );
   const handleDelete = (id: string, title: string) => {
     Alert.alert("Delete Experience", `Remove "${title}" from your resume?`, [
@@ -73,13 +76,13 @@ export default function WorkExperienceScreen() {
       {/* Header */}
       <View style={s.header}>
         <TouchableOpacity onPress={() => router.back()}>
-          <Text style={[s.backArrow, { color: colors.textPrimary }]}>←</Text>
+          <Ionicons name="arrow-back" size={20} color={colors.text} />
         </TouchableOpacity>
         <Text style={[s.headerTitle, { color: colors.textPrimary }]}>
           Work Experience
         </Text>
         <View style={[s.avatar, { backgroundColor: colors.brand }]}>
-          <Text style={{ color: "#fff", fontWeight: "700" }}>A</Text>
+          <Ionicons name="briefcase" size={20} color={colors.text} />
         </View>
       </View>
 
@@ -134,13 +137,21 @@ export default function WorkExperienceScreen() {
                   })
                 }
               >
-                <Text style={s.editIcon}>✏️</Text>
+                <Text style={s.editIcon}>
+                  <Ionicons
+                    name="pencil-outline"
+                    size={20}
+                    color={colors.brand}
+                  />
+                </Text>
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={() => handleDelete(exp._id, exp.jobTitle)}
                 style={{ marginLeft: 8 }}
               >
-                <Text style={s.deleteIcon}>🗑️</Text>
+                <Text style={s.deleteIcon}>
+                  <Ionicons name="trash-bin" size={20} color={colors.brand} />
+                </Text>
               </TouchableOpacity>
             </View>
 

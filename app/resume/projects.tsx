@@ -1,6 +1,7 @@
 // app/resume/projects.tsx — Projects Screen
-import { router } from "expo-router";
-import React, { useCallback, useEffect, useState } from "react";
+import { Ionicons } from "@expo/vector-icons";
+import { router, useFocusEffect } from "expo-router";
+import React, { useCallback, useState } from "react";
 import {
   Alert,
   ScrollView,
@@ -59,9 +60,11 @@ export default function ProjectsScreen() {
       .finally(() => setLoading(false));
   }, []);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load]),
+  );
 
   const handleDelete = (id: string, name: string) => {
     Alert.alert("Delete Project", `Remove "${name}"?`, [
@@ -86,14 +89,16 @@ export default function ProjectsScreen() {
   return (
     <SafeAreaView style={s.safe} edges={["top"]}>
       <View style={s.header}>
+        <TouchableOpacity onPress={() => router.back()}>
+          <Ionicons name="arrow-back" size={20} color={colors.text} />
+        </TouchableOpacity>
         <Text style={[s.headerTitle, { color: colors.textPrimary }]}>
           KarachiJobs
         </Text>
-        <View style={s.headerRight}>
-          <Text style={{ fontSize: 18 }}>🔔</Text>
-          <View style={[s.avatar, { backgroundColor: colors.brand }]}>
-            <Text style={{ color: "#fff" }}>👤</Text>
-          </View>
+        <View style={[s.avatar, { backgroundColor: colors.brand }]}>
+          <Text style={{ color: "#fff" }}>
+            <Ionicons name="folder-open" size={20} color={colors.text} />
+          </Text>
         </View>
       </View>
 
@@ -133,13 +138,21 @@ export default function ProjectsScreen() {
                     } as any)
                   }
                 >
-                  <Text style={s.editIcon}>✏️</Text>
+                  <Text style={s.editIcon}>
+                    <Ionicons
+                      name="pencil-outline"
+                      size={20}
+                      color={colors.brand}
+                    />
+                  </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   onPress={() => handleDelete(project._id, project.name)}
                   style={{ marginLeft: 10 }}
                 >
-                  <Text style={s.deleteIcon}>🗑️</Text>
+                  <Text style={s.deleteIcon}>
+                    <Ionicons name="trash-bin" size={20} color={colors.brand} />
+                  </Text>
                 </TouchableOpacity>
               </View>
             </View>

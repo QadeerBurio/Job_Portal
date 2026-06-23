@@ -3,6 +3,7 @@
 // FIX: Field component is defined OUTSIDE PersonalInfoScreen so React never
 // unmounts/remounts TextInputs on re-render → no glitching, no lost input.
 // ─────────────────────────────────────────────────────────────────────────────
+import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
@@ -158,9 +159,7 @@ export default function PersonalInfoScreen() {
         ]}
       >
         <TouchableOpacity onPress={() => router.back()}>
-          <Text style={[styles.backArrow, { color: colors.textPrimary }]}>
-            ←
-          </Text>
+          <Ionicons name="arrow-back" size={20} color={colors.text} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>
           Personal Information
@@ -169,7 +168,9 @@ export default function PersonalInfoScreen() {
           {avatarUrl ? (
             <Image source={{ uri: avatarUrl }} style={styles.avatarImg} />
           ) : (
-            <Text style={{ color: "#fff" }}>👤</Text>
+            <Text style={{ color: "#fff" }}>
+              <Ionicons name="person" size={20} color={colors.text} />
+            </Text>
           )}
         </View>
       </View>

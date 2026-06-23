@@ -3,16 +3,19 @@
 // It redirects to Work Experience by default (matches the screenshots),
 // with quick links to every other resume section.
 import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
-import React, { useEffect, useState } from "react";
+import { router, useFocusEffect } from "expo-router";
+import React, { useCallback, useState } from "react";
 import {
   ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   TouchableOpacity,
+  useColorScheme,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import ThemeToggle from "../../components/ThemeToggle";
 import { useTheme } from "../../context/ThemeContext";
 import { fetchResume } from "../../services/resumeService";
 
@@ -72,21 +75,26 @@ export default function ResumeHubScreen() {
   const { colors } = useTheme();
   const [completion, setCompletion] = useState(0);
 
-  useEffect(() => {
-    fetchResume()
-      .then((r) => setCompletion(r.completionPercent ?? 0))
-      .catch(() => {});
-  }, []);
-
+  useFocusEffect(
+    useCallback(() => {
+      fetchResume()
+        .then((r) => setCompletion(r.completionPercent ?? 0))
+        .catch(() => {});
+    }, []),
+  );
   const s = makeStyles(colors);
+
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === "dark";
 
   return (
     <SafeAreaView style={s.safe} edges={["top"]}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
       <View style={s.header}>
         <Text style={[s.headerTitle, { color: colors.textPrimary }]}>
           My Resume
         </Text>
-        <Text style={{ fontSize: 18 }}>🔔</Text>
+        <ThemeToggle />
       </View>
 
       <ScrollView
