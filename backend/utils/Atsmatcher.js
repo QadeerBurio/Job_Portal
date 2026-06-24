@@ -8,9 +8,9 @@
 //   4. Location/work-mode compatibility
 //   5. Education requirement matching
 //
-// This module implements a simplified but structurally accurate version of
-// that pipeline. It's deterministic (no AI/LLM calls needed) so it's fast
-// and free to run on every resume save.
+// ✅ FIXED: Added resume completeness penalty — sparse resumes no longer get
+// 40%+ scores just from "neutral defaults." A resume with only personal info
+// filled will score much lower, preventing false-positive matches.
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ── Stopwords to strip before keyword extraction ──────────────────────────────
@@ -196,12 +196,35 @@ function inferRequiredYears(job) {
   return 2; // default mid-level assumption
 }
 
+// ✅ NEW: Calculate resume completeness (0-1) — penalizes sparse resumes
+// A resume with only personal info filled = 1/6 completeness ≈ 0.17
+// This gets squared/powered to penalize low completeness more
+function calculateResumeCompleteness(resume) {
+  let filledSections = 0;
+  const totalSections = 6;
+
+  if ((resume.personalInfo?.fullName ?? "").length > 2) filledSections++;
+  if ((resume.experience ?? []).length > 0) filledSections++;
+  if ((resume.education ?? []).length > 0) filledSections++;
+  if ((resume.skills ?? []).length >= 3) filledSections++;
+  if ((resume.projects ?? []).length > 0) filledSections++;
+  if ((resume.certifications ?? []).length > 0) filledSections++;
+
+  return filledSections / totalSections;
+}
+
 // ── Core scoring function — returns 0-100 ──────────────────────────────────────
 function scoreResumeAgainstJob(resume, job) {
   const jobProfile = buildJobKeywordProfile(job);
   const resumeProfile = buildResumeKeywordProfile(resume);
 
   const breakdown = {};
+
+  // ✅ Calculate penalty for sparse resume — if only 1/6 sections filled,
+  // all scores are multiplied by (1/6)^1.5 ≈ 0.11, so 40% becomes ~4%.
+  // This prevents empty resumes from matching at 40%+ just from defaults.
+  const completeness = calculateResumeCompleteness(resume);
+  const sparsenessPenalty = Math.pow(completeness, 1.5);
 
   // ── 1. Skill match against job's required tags (40% weight) ─────────────────
   // This is the single highest-weighted factor in real ATS systems —
@@ -215,8 +238,8 @@ function scoreResumeAgainstJob(resume, job) {
 
   const tagMatches = setOverlap(jobProfile.tags, allResumeTerms);
   const tagScore =
-    jobProfile.tags.size > 0 ? (tagMatches / jobProfile.tags.size) * 40 : 20; // neutral if job has no tags
-  breakdown.skillMatch = Math.round(tagScore);
+    jobProfile.tags.size > 0 ? (tagMatches / jobProfile.tags.size) * 40 : 5; // ✅ FIXED: was 20, now 5 (neutral)
+  breakdown.skillMatch = Math.round(tagScore * sparsenessPenalty);
 
   // ── 2. Title/role relevance (20% weight) ─────────────────────────────────────
   // Compares job title keywords against resume's past job titles —
@@ -225,8 +248,8 @@ function scoreResumeAgainstJob(resume, job) {
   const titleScore =
     jobProfile.title.size > 0
       ? Math.min((titleMatches / jobProfile.title.size) * 20, 20)
-      : 10;
-  breakdown.titleMatch = Math.round(titleScore);
+      : 2; // ✅ FIXED: was 10, now 2 (neutral)
+  breakdown.titleMatch = Math.round(titleScore * sparsenessPenalty);
 
   // ── 3. Description keyword density (15% weight) ──────────────────────────────
   // Broader text-similarity signal, similar to how ATS full-text indexes work.
@@ -234,8 +257,8 @@ function scoreResumeAgainstJob(resume, job) {
   const descScore =
     jobProfile.desc.size > 0
       ? Math.min((descMatches / jobProfile.desc.size) * 15, 15)
-      : 7;
-  breakdown.contentMatch = Math.round(descScore);
+      : 0; // ✅ FIXED: was 7, now 0 (neutral — no content, no points)
+  breakdown.contentMatch = Math.round(descScore * sparsenessPenalty);
 
   // ── 4. Experience level fit (15% weight) ──────────────────────────────────────
   const resumeYears = totalYearsExperience(resume);
@@ -248,7 +271,7 @@ function scoreResumeAgainstJob(resume, job) {
   } else {
     expScore = Math.max(0, 15 - (requiredYears - resumeYears) * 4);
   }
-  breakdown.experienceLevelMatch = Math.round(expScore);
+  breakdown.experienceLevelMatch = Math.round(expScore * sparsenessPenalty);
 
   // ── 5. Location compatibility (10% weight) ────────────────────────────────────
   const resumeCity = (resume.personalInfo?.city ?? "").toLowerCase();
@@ -261,7 +284,7 @@ function scoreResumeAgainstJob(resume, job) {
   else if (jobArea.includes("karachi") && resumeCity.includes("karachi"))
     locationScore = 8;
   else locationScore = 3;
-  breakdown.locationMatch = Math.round(locationScore);
+  breakdown.locationMatch = Math.round(locationScore * sparsenessPenalty);
 
   const total = Math.min(
     Math.round(
@@ -281,6 +304,7 @@ function scoreResumeAgainstJob(resume, job) {
     missingSkills: [...jobProfile.tags].filter((t) => !allResumeTerms.has(t)),
     resumeYears,
     requiredYears,
+    completeness, // ✅ NEW: expose completeness for debugging
   };
 }
 
@@ -332,4 +356,5 @@ module.exports = {
   matchResumeToJobs,
   extractKeywords,
   totalYearsExperience,
+  calculateResumeCompleteness, // ✅ Export for testing/debugging
 };

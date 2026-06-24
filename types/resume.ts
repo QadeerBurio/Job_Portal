@@ -78,6 +78,8 @@ export interface ResumeTemplate {
 }
 
 export interface Resume {
+  uploadedResumeFileName: null;
+  uploadedResumeAt: null;
   _id: string;
   userId: string;
   personalInfo: PersonalInfo;

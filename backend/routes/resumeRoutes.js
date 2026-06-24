@@ -9,15 +9,26 @@
 // If your authRoutes.js uses a different JWT payload shape, open the
 // requireAuth function below and adjust the `decoded.userId ?? decoded.id ...`
 // line to match your actual token payload field name.
+//
+// ✅ NEW (Upload Existing Resume feature): POST /upload, GET /upload,
+//    DELETE /upload, PUT /source — see bottom section.
 // ─────────────────────────────────────────────────────────────────────────────
 const express = require("express");
 const jwt = require("jsonwebtoken");
+const fs = require("fs");
+const path = require("path");
 const router = express.Router();
 
 const Resume = require("../models/Resume");
 const Job = require("../models/Job");
-const { matchResumeToJobs } = require("../utils/Atsmatcher");
+const { matchResumeToJobs } = require("../utils/atsMatcher");
 const { calculateCompletion } = require("../utils/completion");
+const {
+  uploadResumeFile,
+  UPLOAD_DIR,
+  ALLOWED_MIME_TYPES,
+} = require("../middleware/uploadMiddleware");
+const { parseResumeFile } = require("../utils/resumeParser");
 
 // ════════════════════════════════════════════════════════════════════════════
 // AUTH MIDDLEWARE — verifies JWT from Authorization header
@@ -70,7 +81,7 @@ router.get("/", requireAuth, async (req, res) => {
     // completionPercent powers the "Resume Strength" bar on resume.tsx —
     // a presence check (did you fill the section), not an ATS quality score.
     const { completionPercent, sections } = calculateCompletion(
-      resume.toObject(),
+      resume.toObject({ virtuals: false }),
     );
 
     res.json({
@@ -363,7 +374,7 @@ router.get("/templates", async (req, res) => {
 const { calculateAtsScore } = require("../utils/Atsscore");
 
 async function recalculateAtsScore(resume) {
-  const result = calculateAtsScore(resume.toObject());
+  const result = calculateAtsScore(resume.toObject({ virtuals: false }));
   resume.atsScore = result.total;
   resume.lastScoredAt = new Date();
   await resume.save();
@@ -389,7 +400,14 @@ router.get("/matched-jobs", requireAuth, async (req, res) => {
     const limit = Number(req.query.limit) || 10;
     const minScore = Number(req.query.minScore) || 0;
 
-    const matches = await matchResumeToJobs(resume.toObject(), Job, limit);
+    // ✅ atsMatcher.js's matchResumeToJobs expects an OPTIONS OBJECT as its
+    // 3rd argument ({ limit, minScore }), not a bare number — passing a
+    // number here silently became `options.limit` = undefined inside the
+    // function, since destructuring a number gives you the defaults instead.
+    const matches = await matchResumeToJobs(resume.toObject(), Job, {
+      limit,
+      minScore,
+    });
     res.json(matches);
   } catch (err) {
     console.error("GET /api/resume/matched-jobs error:", err.message);
@@ -405,7 +423,7 @@ router.get("/match-score/:jobId", requireAuth, async (req, res) => {
     const job = await Job.findById(req.params.jobId).lean();
     if (!job) return res.status(404).json({ error: "Job not found" });
 
-    const { scoreResumeAgainstJob } = require("../utils/Atsmatcher");
+    const { scoreResumeAgainstJob } = require("../utils/atsMatcher");
     const result = {
       score: scoreResumeAgainstJob(resume.toObject(), job),
       job: job._id,
@@ -413,6 +431,168 @@ router.get("/match-score/:jobId", requireAuth, async (req, res) => {
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// ✅ NEW — UPLOAD EXISTING RESUME
+// ════════════════════════════════════════════════════════════════════════════
+
+// ── POST /api/resume/upload — upload + parse a PDF/DOCX resume ─────────────
+router.post("/upload", requireAuth, (req, res) => {
+  uploadResumeFile(req, res, async (multerErr) => {
+    // ── Multer-level errors (wrong type, too large, no file) ────────────────
+    if (multerErr) {
+      if (multerErr.message === "UNSUPPORTED_FILE_TYPE") {
+        return res.status(400).json({
+          error: "Unsupported file type. Please upload a PDF or DOCX file.",
+        });
+      }
+      if (multerErr.code === "LIMIT_FILE_SIZE") {
+        return res.status(400).json({
+          error: "File is too large. Maximum size is 10MB.",
+        });
+      }
+      return res.status(400).json({ error: multerErr.message });
+    }
+    if (!req.file) {
+      return res.status(400).json({ error: "No file uploaded." });
+    }
+
+    try {
+      const resume = await getOrCreateResume(req.userId);
+      const fileType = ALLOWED_MIME_TYPES[req.file.mimetype]; // "pdf" | "docx"
+      const fileUrl = `/uploads/resumes/${req.file.filename}`; // served via express.static in server.js
+
+      // ── Parse the file into the same shape the manual builder uses ───────
+      const parsed = await parseResumeFile(req.file.path, fileType);
+
+      resume.uploadedResume = {
+        fileName: req.file.originalname,
+        fileSize: req.file.size,
+        fileUrl,
+        fileType,
+        uploadDate: new Date(),
+        rawText: parsed.rawText,
+        parseStatus: parsed.parseStatus,
+        parsedSections: parsed.parsedSections,
+      };
+
+      // ── Best-effort write into the SAME arrays the manual builder uses ───
+      // Per the product requirement: uploaded data must "be extracted and
+      // stored in the resume collection... just like user creates resume
+      // manually." We do NOT keep a separate parsed-data copy — we write
+      // directly into personalInfo/experience/education/skills, exactly
+      // like add-experience.tsx etc. do. The user reviews/edits afterward
+      // on the normal section screens (no new "parsed data" UI needed).
+      //
+      // We only overwrite a section if the parser actually found something
+      // for it, so we never blow away a manually-built section with an
+      // empty parse result for a different section.
+      if (parsed.data.personalInfo.fullName || parsed.data.personalInfo.email) {
+        resume.personalInfo = {
+          ...resume.personalInfo.toObject(),
+          ...Object.fromEntries(
+            Object.entries(parsed.data.personalInfo).filter(([, v]) => v),
+          ),
+        };
+      }
+      if (parsed.data.experience.length > 0) {
+        resume.experience = parsed.data.experience.map((e) => {
+          const { _dateRangeRaw, ...rest } = e;
+          return rest;
+        });
+      }
+      if (parsed.data.education.length > 0) {
+        resume.education = parsed.data.education;
+      }
+      if (parsed.data.skills.length > 0) {
+        resume.skills = parsed.data.skills;
+      }
+
+      // Newly uploaded resume becomes the active source automatically —
+      // satisfies requirement #8 ("if uploaded resume exists, use it"),
+      // and the source-select screen lets the user switch back later if
+      // they also have a manually built resume.
+      resume.activeSource = "uploaded";
+
+      await resume.save();
+      await recalculateAtsScore(resume);
+
+      res.status(201).json({
+        uploadedResume: resume.uploadedResume,
+        parsedData: parsed.data,
+        activeSource: resume.activeSource,
+        message:
+          parsed.parseStatus === "failed"
+            ? "File uploaded, but we couldn't extract readable text (likely a scanned/image-based file). Please fill in your resume manually."
+            : parsed.parseStatus === "partial"
+              ? "Resume uploaded. We filled in what we could find — please review and complete the rest."
+              : "Resume uploaded and parsed successfully. Please review the imported details.",
+      });
+    } catch (err) {
+      console.error("POST /api/resume/upload error:", err.message);
+      // Clean up the orphaned file if parsing/saving failed after multer wrote it
+      if (req.file?.path && fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
+      res.status(500).json({ error: err.message });
+    }
+  });
+});
+
+// ── GET /api/resume/upload — fetch uploaded resume metadata ────────────────
+router.get("/upload", requireAuth, async (req, res) => {
+  try {
+    const resume = await getOrCreateResume(req.userId);
+    res.json(resume.uploadedResume);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── DELETE /api/resume/upload — remove uploaded resume + its file ──────────
+router.delete("/upload", requireAuth, async (req, res) => {
+  try {
+    const resume = await getOrCreateResume(req.userId);
+    const existingUrl = resume.uploadedResume?.fileUrl;
+
+    if (existingUrl) {
+      const filePath = path.join(UPLOAD_DIR, path.basename(existingUrl));
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    }
+
+    resume.uploadedResume = {};
+    if (resume.activeSource === "uploaded") {
+      resume.activeSource = "manual";
+    }
+    await resume.save();
+    res.json({ success: true, activeSource: resume.activeSource });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── PUT /api/resume/source — switch between "manual" and "uploaded" ────────
+// Used by the source-select screen when BOTH a manual and uploaded resume
+// exist and the user needs to pick which one drives ATS scoring / matching.
+router.put("/source", requireAuth, async (req, res) => {
+  try {
+    const { source } = req.body; // "manual" | "uploaded"
+    if (!["manual", "uploaded"].includes(source)) {
+      return res
+        .status(400)
+        .json({ error: "source must be 'manual' or 'uploaded'" });
+    }
+    const resume = await getOrCreateResume(req.userId);
+    if (source === "uploaded" && !resume.uploadedResume?.fileName) {
+      return res.status(400).json({ error: "No uploaded resume exists yet." });
+    }
+    resume.activeSource = source;
+    await resume.save();
+    res.json({ activeSource: resume.activeSource });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
   }
 });
 

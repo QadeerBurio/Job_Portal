@@ -5,6 +5,11 @@
 //   startDate, endDate, isCurrent, description
 // Frontend (add-project.tsx) sends: name, role, technologies, projectUrl,
 //   description, startDate, endDate, isCurrent
+//
+// ✅ NEW (Upload Existing Resume feature):
+//   - uploadedResume: stores the raw uploaded file's metadata + extracted text
+//   - activeSource: "manual" | "uploaded" — which resume is currently used for
+//     ATS scoring + job matching when both exist
 // ─────────────────────────────────────────────────────────────────────────────
 const mongoose = require("mongoose");
 
@@ -103,6 +108,32 @@ const personalInfoSchema = new mongoose.Schema(
   { _id: false },
 );
 
+// ── ✅ NEW: Uploaded Resume (embedded, no _id — one per user, like personalInfo) ─
+const uploadedResumeSchema = new mongoose.Schema(
+  {
+    fileName: { type: String, default: "" }, // original name, e.g. "Ahmed_CV.pdf"
+    fileSize: { type: Number, default: 0 }, // bytes
+    fileUrl: { type: String, default: "" }, // relative path served via express.static, e.g. /uploads/resumes/abc123.pdf
+    fileType: { type: String, enum: ["pdf", "docx", ""], default: "" },
+    uploadDate: { type: Date, default: null },
+    rawText: { type: String, default: "" }, // full extracted text — kept for re-parsing/debugging, not shown raw in UI
+    parseStatus: {
+      type: String,
+      enum: ["pending", "success", "partial", "failed"],
+      default: "pending",
+    },
+    // Which sections the parser was able to populate — drives the
+    // "review your imported resume" UI so users know what to double check
+    parsedSections: {
+      personalInfo: { type: Boolean, default: false },
+      experience: { type: Boolean, default: false },
+      education: { type: Boolean, default: false },
+      skills: { type: Boolean, default: false },
+    },
+  },
+  { _id: false },
+);
+
 // ── Root Resume Schema ────────────────────────────────────────────────────────
 const resumeSchema = new mongoose.Schema(
   {
@@ -122,6 +153,18 @@ const resumeSchema = new mongoose.Schema(
     templateId: { type: String, default: "" }, // ← empty by default so completion.js can detect "not yet chosen"
     atsScore: { type: Number, default: 0 },
     lastScoredAt: { type: Date, default: null },
+
+    // ✅ NEW fields for Upload Existing Resume feature
+    uploadedResume: { type: uploadedResumeSchema, default: () => ({}) },
+    // "manual"   → use personalInfo/education/experience/... as the source of truth
+    // "uploaded" → use the data that was auto-parsed from uploadedResume into
+    //              the SAME fields above (we overwrite, never a separate copy —
+    //              see resumeParser.js for why)
+    activeSource: {
+      type: String,
+      enum: ["manual", "uploaded"],
+      default: "manual",
+    },
   },
   { timestamps: true },
 );
@@ -138,6 +181,14 @@ resumeSchema.virtual("completionPercent").get(function () {
   const { calculateCompletion } = require("../utils/completion");
   const raw = this.toObject({ virtuals: false });
   return calculateCompletion(raw).completionPercent;
+});
+
+// ✅ NEW: Virtual: hasUploadedResume — convenience flag for the frontend so
+// resume.tsx / upload-resume.tsx don't have to inspect uploadedResume.fileName
+// themselves to know whether an upload exists.
+resumeSchema.virtual("hasUploadedResume").get(function () {
+  const raw = this.toObject({ virtuals: false });
+  return Boolean(raw.uploadedResume?.fileName);
 });
 
 resumeSchema.set("toJSON", { virtuals: true });

@@ -12,6 +12,7 @@ const authRoutes = require("./routes/authRoutes");
 const syncJobs = require("./services/syncJobs");
 const Job = require("./models/Job");
 const resumeRoutes = require("./routes/resumeRoutes");
+const path = require("path");
 
 if (!process.env.MONGODB_URI) {
   console.error("❌ MONGODB_URI missing from .env");
@@ -22,6 +23,8 @@ const app = express();
 
 app.use(cors());
 app.use(express.json());
+
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 app.use("/api/auth", authRoutes);
 // ...
