@@ -252,6 +252,10 @@ export default function ResumeHubScreen() {
           </View>
         </View>
 
+        <Text style={[s.sectionHeading, { color: colors.textPrimary }]}>
+          Build Your Resume
+        </Text>
+
         <View style={s.grid}>
           {SECTIONS.map((sec) => (
             <TouchableOpacity
@@ -275,6 +279,13 @@ export default function ResumeHubScreen() {
             </TouchableOpacity>
           ))}
         </View>
+
+        <Text style={[s.sectionHeading, { color: colors.textPrimary }]}>
+          Already have a Resume?
+        </Text>
+        <Text style={[s.sectionSubheading, { color: colors.textSecondary }]}>
+          Skip the manual steps — import your existing resume in seconds.
+        </Text>
 
         {/* ✅ Upload Existing Resume card — shows upload status when a file
             has already been imported. */}
@@ -436,6 +447,20 @@ const makeStyles = (c: any) =>
     },
     cardIcon: { fontSize: 28, marginBottom: 10 },
     cardLabel: { fontSize: 13, fontWeight: "600", textAlign: "center" },
+
+    // ── Section headings ──────────────────────────────────────────────────
+    sectionHeading: {
+      fontSize: 17,
+      fontWeight: "700",
+      marginBottom: 14,
+      marginTop: 8,
+    },
+    sectionSubheading: {
+      fontSize: 13,
+      lineHeight: 18,
+      marginTop: -10,
+      marginBottom: 14,
+    },
 
     // ── Upload card ────────────────────────────────────────────────────────
     uploadCard: {

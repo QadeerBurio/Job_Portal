@@ -7,6 +7,7 @@
     "dev": "nodemon server.js"
   },
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
     "apify-client": "^2.23.4",
     "axios": "^1.18.0",
     "bcryptjs": "^3.0.3",

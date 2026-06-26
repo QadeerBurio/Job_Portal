@@ -4,16 +4,18 @@
 // and fix any missing data. The actual editing happens in the existing section
 // screens (experience.tsx, education.tsx, etc.) — this screen is just a review
 // + summary + navigation hub.
+//
+// ✅ UPDATED: Now includes Projects and Certifications sections
 // ─────────────────────────────────────────────────────────────────────────────
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import React, { useState } from "react";
 import {
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "../../context/ThemeContext";
@@ -24,12 +26,15 @@ export default function ReviewUploadScreen() {
   const [loading, setLoading] = useState(true);
   const [resume, setResume] = useState<any>(null);
 
-  // ✅ Define styles first
   const s = makeStyles(colors);
 
   React.useEffect(() => {
     fetchResume()
-      .then(setResume)
+      .then((data) => {
+        console.log("FETCHED RESUME:");
+        console.log(JSON.stringify(data, null, 2));
+        setResume(data);
+      })
       .catch(console.error)
       .finally(() => setLoading(false));
   }, []);
@@ -53,6 +58,7 @@ export default function ReviewUploadScreen() {
   const educationCount = resume?.education?.length ?? 0;
   const skillsCount = resume?.skills?.length ?? 0;
   const projectsCount = resume?.projects?.length ?? 0;
+  const certificationsCount = resume?.certifications?.length ?? 0;
 
   const filledSections = [
     hasPersonalInfo,
@@ -125,6 +131,12 @@ export default function ReviewUploadScreen() {
             colors={colors}
             styles={s}
           />
+          <SummaryBox
+            label="Certifications"
+            value={`${certificationsCount}`}
+            colors={colors}
+            styles={s}
+          />
         </View>
 
         {/* Quick Review Actions */}
@@ -167,6 +179,15 @@ export default function ReviewUploadScreen() {
               colors={colors}
               styles={s}
               onPress={() => router.push("/resume/projects")}
+            />
+          )}
+          {certificationsCount > 0 && (
+            <ReviewAction
+              icon="checkmark-done-outline"
+              label="Certifications"
+              colors={colors}
+              styles={s}
+              onPress={() => router.push("/resume/certifications")}
             />
           )}
         </View>
@@ -221,7 +242,6 @@ export default function ReviewUploadScreen() {
 }
 
 // ── Sub-components ─────────────────────────────────────────────────────────
-// ✅ Now accept styles as props
 
 function SummaryBox({ label, value, colors, styles }: any) {
   return (
@@ -253,7 +273,6 @@ function ReviewAction({ icon, label, colors, styles, onPress }: any) {
 }
 
 // ── Styles ─────────────────────────────────────────────────────────────────
-// ✅ makeStyles is now a function that returns styled objects with theme colors
 
 function makeStyles(colors: any) {
   return StyleSheet.create({
@@ -290,7 +309,7 @@ function makeStyles(colors: any) {
       marginBottom: 24,
     },
     summaryBox: {
-      width: "31%",
+      width: "48%",
       borderRadius: 12,
       padding: 12,
       alignItems: "center",

@@ -34,23 +34,26 @@ export default function WorkExperienceScreen() {
   const [completion, setCompletion] = useState(0);
   const [loading, setLoading] = useState(true);
 
+  // ✅ FIX: Single useFocusEffect that loads BOTH experience AND completion.
+  // Previously load() was defined but never called, and the useFocusEffect
+  // only fetched completion — so experience always stayed [] and no cards showed.
   const load = useCallback(() => {
     setLoading(true);
     fetchResume()
       .then((resume) => {
-        setExperience(resume.experience);
+        setExperience(resume.experience ?? []);
         setCompletion(resume.completionPercent ?? 0);
       })
       .catch((err) => Alert.alert("Error", err.message))
       .finally(() => setLoading(false));
   }, []);
+
   useFocusEffect(
     useCallback(() => {
-      fetchResume()
-        .then((r) => setCompletion(r.completionPercent ?? 0))
-        .catch(() => {});
-    }, []),
+      load();
+    }, [load]),
   );
+
   const handleDelete = (id: string, title: string) => {
     Alert.alert("Delete Experience", `Remove "${title}" from your resume?`, [
       { text: "Cancel", style: "cancel" },
@@ -137,27 +140,27 @@ export default function WorkExperienceScreen() {
                   })
                 }
               >
-                <Text style={s.editIcon}>
-                  <Ionicons
-                    name="pencil-outline"
-                    size={20}
-                    color={colors.brand}
-                  />
-                </Text>
+                <Ionicons
+                  name="pencil-outline"
+                  size={20}
+                  color={colors.brand}
+                />
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={() => handleDelete(exp._id, exp.jobTitle)}
                 style={{ marginLeft: 8 }}
               >
-                <Text style={s.deleteIcon}>
-                  <Ionicons name="trash-bin" size={20} color={colors.brand} />
-                </Text>
+                <Ionicons name="trash-bin" size={20} color={colors.brand} />
               </TouchableOpacity>
             </View>
 
             <View style={[s.dateBadge, { backgroundColor: colors.bgTertiary }]}>
               <Text style={[s.dateText, { color: colors.textSecondary }]}>
-                {formatDateRange(exp.startDate, exp.endDate, exp.isCurrent)}
+                {formatDateRange(
+                  exp.startDate,
+                  exp.endDate ?? null,
+                  exp.isCurrent,
+                )}
               </Text>
             </View>
 
@@ -227,7 +230,6 @@ const makeStyles = (c: any) =>
       borderBottomWidth: 1,
       borderBottomColor: c.border,
     },
-    backArrow: { fontSize: 24 },
     headerTitle: { fontSize: 19, fontWeight: "700" },
     avatar: {
       width: 36,
@@ -262,8 +264,6 @@ const makeStyles = (c: any) =>
     },
     jobTitle: { fontSize: 16, fontWeight: "700" },
     companyLine: { fontSize: 13, marginTop: 2 },
-    editIcon: { fontSize: 16 },
-    deleteIcon: { fontSize: 16 },
     dateBadge: {
       alignSelf: "flex-start",
       borderRadius: 8,

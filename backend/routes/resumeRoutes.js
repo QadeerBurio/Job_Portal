@@ -28,7 +28,7 @@ const {
   UPLOAD_DIR,
   ALLOWED_MIME_TYPES,
 } = require("../middleware/uploadMiddleware");
-const { parseResumeFile } = require("../utils/resumeParser");
+const { parseResumeFile } = require("../utils/geminiResumeParser");
 
 // ════════════════════════════════════════════════════════════════════════════
 // AUTH MIDDLEWARE — verifies JWT from Authorization header
@@ -510,11 +510,31 @@ router.post("/upload", requireAuth, (req, res) => {
         resume.skills = parsed.data.skills;
       }
 
+      if (parsed.data.projects?.length > 0) {
+        resume.projects = parsed.data.projects.map((p) => {
+          const { _dateRangeRaw, ...rest } = p;
+          return rest;
+        });
+      }
+
+      if (parsed.data.certifications?.length > 0) {
+        resume.certifications = parsed.data.certifications;
+      }
+
       // Newly uploaded resume becomes the active source automatically —
       // satisfies requirement #8 ("if uploaded resume exists, use it"),
       // and the source-select screen lets the user switch back later if
       // they also have a manually built resume.
       resume.activeSource = "uploaded";
+
+      console.log("Saving resume:");
+      console.log({
+        experience: resume.experience.length,
+        education: resume.education.length,
+        skills: resume.skills.length,
+        projects: resume.projects.length,
+        certifications: resume.certifications.length,
+      });
 
       await resume.save();
       await recalculateAtsScore(resume);

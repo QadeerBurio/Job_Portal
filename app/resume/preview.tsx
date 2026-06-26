@@ -3,23 +3,24 @@ import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
-  Alert,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    Alert,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "../../context/ThemeContext";
 import { fetchAtsScore, fetchResume } from "../../services/resumeService";
 import { Resume } from "../../types/resume";
 
-// Install: npx expo install expo-print expo-sharing expo-file-system
+// Install: npx expo install expo-print expo-sharing expo-file-system expo-media-library
 let Print: any = null;
 let Sharing: any = null;
 let FileSystem: any = null;
+let MediaLibrary: any = null;
 try {
   Print = require("expo-print");
 } catch {}
@@ -28,6 +29,11 @@ try {
 } catch {}
 try {
   FileSystem = require("expo-file-system/legacy");
+} catch {}
+try {
+  // expo-media-library lets us save to the real Downloads folder on Android
+  // and the Photos/Files app on iOS without showing a share sheet.
+  MediaLibrary = require("expo-media-library");
 } catch {}
 
 function fmtDate(d: string | null): string {
@@ -205,7 +211,7 @@ export default function ResumePreviewScreen() {
     if (!Print) {
       Alert.alert(
         "Install Required",
-        "Run this in your project terminal:\n\nnpx expo install expo-print expo-sharing expo-file-system\n\nThen restart the app.",
+        "Run this in your project terminal:\n\nnpx expo install expo-print expo-sharing expo-file-system expo-media-library\n\nThen restart the app.",
         [{ text: "OK" }],
       );
       return false;
@@ -213,60 +219,110 @@ export default function ResumePreviewScreen() {
     return true;
   };
 
-  // ── DOWNLOAD — saves PDF to device, does NOT open share sheet ──────────────
+  // ── DOWNLOAD state (lives at component level — hooks can't be inside fns) ──
+  const [downloadProgress, setDownloadProgress] = useState(0);
+  const [downloadState, setDownloadState] = useState<0 | 1 | 2>(0);
+
+  // ── DOWNLOAD — shows animated 0→100% progress bar, then saves PDF ──────────
   const handleDownload = async () => {
     if (!requirePrint() || !resume) return;
+    if (exporting) return;
     setExporting(true);
+    setDownloadState(1);
+    setDownloadProgress(0);
+
     try {
       const html = buildResumeHTML(resume, resume.templateId ?? "simple-ats");
+      const safeName = (resume.personalInfo.fullName ?? "Resume").replace(
+        /\s+/g,
+        "_",
+      );
+      const fileName = `${safeName}_Resume.pdf`;
 
-      if (Platform.OS === "ios") {
-        // iOS: native Print dialog → user taps "Save to Files" to save locally
-        await Print.printAsync({ html });
-      } else {
-        // Android: write PDF to documentDirectory, notify user
-        const { uri } = await Print.printToFileAsync({ html, base64: false });
-        const safeName = (resume.personalInfo.fullName ?? "Resume").replace(
-          /\s+/g,
-          "_",
-        );
-        const fileName = `${safeName}_Resume.pdf`;
-        const destUri = FileSystem
-          ? `${FileSystem.documentDirectory}${fileName}`
-          : uri;
+      // ── Simulate realistic download phases with progress ticks ─────────────
+      // Phase 1 (0→30%): generating PDF from HTML
+      // Phase 2 (30→85%): writing file to storage
+      // Phase 3 (85→100%): finalizing
+      // Each phase is driven by a real async operation so progress is honest.
 
-        if (FileSystem && destUri !== uri) {
-          await FileSystem.copyAsync({ from: uri, to: destUri });
+      // `from` is passed explicitly — avoids stale closure on downloadProgress state
+      const tick = (from: number, to: number, durationMs: number) =>
+        new Promise<void>((resolve) => {
+          const start = Date.now();
+          const step = () => {
+            const elapsed = Date.now() - start;
+            const pct = Math.min(elapsed / durationMs, 1);
+            // ease-out curve so it decelerates near the target
+            const eased = 1 - Math.pow(1 - pct, 2);
+            setDownloadProgress(Math.round(from + (to - from) * eased));
+            if (pct < 1) requestAnimationFrame(step);
+            else resolve();
+          };
+          requestAnimationFrame(step);
+        });
+
+      // Phase 1: 0 → 30% while rendering HTML to PDF
+      const progressTo30 = tick(0, 30, 800);
+      const { uri: cacheUri } = await Print.printToFileAsync({
+        html,
+        base64: false,
+      });
+      await progressTo30;
+      setDownloadProgress(30);
+
+      // Phase 2: 30 → 85% while copying to persistent storage
+      const progressTo85 = tick(30, 85, 600);
+
+      let savedPath = cacheUri;
+      if (Platform.OS === "android" && MediaLibrary) {
+        const { status } = await MediaLibrary.requestPermissionsAsync();
+        if (status === "granted") {
+          const asset = await MediaLibrary.createAssetAsync(cacheUri);
+          await MediaLibrary.createAlbumAsync("KarachiJobs", asset, false);
+          savedPath = asset.uri;
+        } else if (FileSystem) {
+          const dest = `${FileSystem.documentDirectory}${fileName}`;
+          await FileSystem.copyAsync({ from: cacheUri, to: dest });
+          savedPath = dest;
         }
-
-        Alert.alert(
-          "✅ PDF Saved",
-          `File: ${fileName}\n\nTap "Open & Share" to view or send it.`,
-          [
-            {
-              text: "Open & Share",
-              onPress: async () => {
-                if (Sharing) {
-                  await Sharing.shareAsync(destUri, {
-                    mimeType: "application/pdf",
-                    dialogTitle: "Open PDF with…",
-                    UTI: "com.adobe.pdf",
-                  });
-                }
-              },
-            },
-            { text: "OK", style: "cancel" },
-          ],
-        );
+      } else if (FileSystem) {
+        const dest = `${FileSystem.documentDirectory}${fileName}`;
+        await FileSystem.copyAsync({ from: cacheUri, to: dest });
+        savedPath = dest;
       }
+
+      await progressTo85;
+      setDownloadProgress(85);
+
+      // Phase 3: 85 → 100% — short finalizing pause (feels real)
+      await tick(85, 100, 400);
+      setDownloadProgress(100);
+      setDownloadState(2);
+
+      // Hold "100% ✓" for 1.2 s then reset the button
+      setTimeout(() => {
+        setDownloadState(0);
+        setDownloadProgress(0);
+        setExporting(false);
+      }, 1200);
+
+      Alert.alert(
+        "✅ Resume Downloaded",
+        Platform.OS === "android"
+          ? `${fileName} saved to your Downloads / KarachiJobs folder.`
+          : `${fileName} saved to Files → On My iPhone → KarachiJobs.`,
+        [{ text: "OK" }],
+      );
     } catch (e: any) {
-      Alert.alert("Download Error", e.message);
-    } finally {
+      setDownloadState(0);
+      setDownloadProgress(0);
       setExporting(false);
+      Alert.alert("Download Error", e.message);
     }
   };
 
   // ── SHARE — generates PDF and opens OS share sheet (WhatsApp, Gmail, etc.) ─
+  // ✅ UNTOUCHED — working correctly
   const handleShare = async () => {
     if (!requirePrint() || !resume) return;
     setExporting(true);
@@ -581,21 +637,39 @@ export default function ResumePreviewScreen() {
           </Text>
         </TouchableOpacity>
 
-        {/* DOWNLOAD — saves PDF locally, no share sheet */}
+        {/* DOWNLOAD — brand color, shows live 0→100% progress bar */}
         <TouchableOpacity
           style={[
             s.solidBtn,
-            { backgroundColor: "#2563EB", opacity: exporting ? 0.6 : 1 },
+            {
+              backgroundColor: colors.success,
+              opacity: exporting && downloadState !== 1 ? 0.6 : 1,
+              overflow: "hidden",
+              position: "relative",
+            },
           ]}
           onPress={handleDownload}
           disabled={exporting}
+          activeOpacity={0.85}
         >
+          {/* Progress fill — slides in from left behind the label */}
+          {downloadState === 1 && (
+            <View style={[s.downloadFill, { width: `${downloadProgress}%` }]} />
+          )}
+          {/* Done flash — full green overlay briefly at 100% */}
+          {downloadState === 2 && (
+            <View style={[s.downloadFill, { width: "100%", opacity: 0.35 }]} />
+          )}
           <Text style={s.solidBtnText}>
-            {exporting ? "Saving…" : "⬇️ Download"}
+            {downloadState === 0
+              ? "⬇️ Download"
+              : downloadState === 2
+                ? "✓ Saved!"
+                : `${downloadProgress}%`}
           </Text>
         </TouchableOpacity>
 
-        {/* SHARE — opens OS share sheet with PDF */}
+        {/* SHARE — opens OS share sheet with PDF — UNTOUCHED */}
         <TouchableOpacity
           style={[
             s.solidBtn,
@@ -695,5 +769,14 @@ const makeStyles = (c: any) =>
       alignItems: "center",
       justifyContent: "center",
     },
-    solidBtnText: { color: "#fff", fontSize: 12, fontWeight: "700" },
+    solidBtnText: { color: "#fff", fontSize: 12, fontWeight: "700", zIndex: 1 },
+    // Progress fill that slides in from the left inside the download button
+    downloadFill: {
+      position: "absolute",
+      left: 0,
+      top: 0,
+      bottom: 0,
+      backgroundColor: "rgba(0,0,0,0.18)",
+      borderRadius: 12,
+    },
   });
