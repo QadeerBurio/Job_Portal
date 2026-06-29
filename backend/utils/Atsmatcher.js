@@ -1,17 +1,10 @@
-// backend/utils/atsMatcher.js
+// backend/utils/atsMatcher.js (UPDATED)
 // ─────────────────────────────────────────────────────────────────────────────
-// Real-world ATS systems (Workday, Taleo, Greenhouse, iCIMS) score resumes
-// against job postings using a combination of:
-//   1. Keyword/skill overlap (exact + fuzzy matching against required skills)
-//   2. Title/role similarity (parsed job titles vs resume experience titles)
-//   3. Experience level matching (years required vs years on resume)
-//   4. Location/work-mode compatibility
-//   5. Education requirement matching
-//
-// ✅ FIXED: Added resume completeness penalty — sparse resumes no longer get
-// 40%+ scores just from "neutral defaults." A resume with only personal info
-// filled will score much lower, preventing false-positive matches.
+// FIXED: Now extracts skills from job description if job.tags is empty.
+// This ensures matchedSkills and missingSkills arrays are always populated.
 // ─────────────────────────────────────────────────────────────────────────────
+
+const { extractJobSkills } = require("./skillExtractor");
 
 // ── Stopwords to strip before keyword extraction ──────────────────────────────
 const STOPWORDS = new Set([
@@ -80,13 +73,13 @@ const STOPWORDS = new Set([
   "skills",
 ]);
 
-// ── Common skill synonyms — ATS systems normalize these before matching ───────
+// ── Skill synonyms ───────────────────────────────────────────────────────────
 const SKILL_SYNONYMS = {
   js: "javascript",
   ts: "typescript",
   reactjs: "react",
   "react.js": "react",
-  nodejs: "node",
+  nodejs: "node.js",
   "node.js": "node",
   vuejs: "vue",
   "vue.js": "vue",
@@ -105,26 +98,27 @@ function normalizeTerm(term) {
   return SKILL_SYNONYMS[lower] ?? lower;
 }
 
-// ── Extract keywords from free text (job description, resume summary) ─────────
+// ── Extract keywords from text ───────────────────────────────────────────────
 function extractKeywords(text) {
   if (!text) return [];
   return text
     .toLowerCase()
-    .replace(/[^\w\s+#.]/g, " ") // keep + # . for C++, C#, Node.js
+    .replace(/[^\w\s+#.]/g, " ")
     .split(/\s+/)
     .map((w) => w.trim())
     .filter((w) => w.length > 1 && !STOPWORDS.has(w))
     .map(normalizeTerm);
 }
 
-// ── Build a weighted keyword set from a job posting ───────────────────────────
+// ── Build weighted keyword profile from job ──────────────────────────────────
 function buildJobKeywordProfile(job) {
+  // ✅ FIXED: Extract skills from description if job.tags is empty
+  const jobSkills = extractJobSkills(job);
+  const tagWords = jobSkills.map(normalizeTerm);
+
   const titleWords = extractKeywords(job.title ?? "");
-  const tagWords = (job.tags ?? []).map(normalizeTerm);
   const descWords = extractKeywords(job.description ?? "");
 
-  // Weight: explicit tags > title words > description words
-  // (mirrors how real ATS weights "required skills" fields highest)
   return {
     tags: new Set(tagWords),
     title: new Set(titleWords),
@@ -132,7 +126,7 @@ function buildJobKeywordProfile(job) {
   };
 }
 
-// ── Build a weighted keyword set from a resume ────────────────────────────────
+// ── Build weighted keyword profile from resume ───────────────────────────────
 function buildResumeKeywordProfile(resume) {
   const skillWords = (resume.skills ?? []).map((s) => normalizeTerm(s.name));
 
@@ -193,12 +187,9 @@ function inferRequiredYears(job) {
   if (match) return parseInt(match[1], 10);
   if (/senior|lead|principal|architect/i.test(text)) return 5;
   if (/junior|entry|fresh|intern|trainee/i.test(text)) return 0;
-  return 2; // default mid-level assumption
+  return 2;
 }
 
-// ✅ NEW: Calculate resume completeness (0-1) — penalizes sparse resumes
-// A resume with only personal info filled = 1/6 completeness ≈ 0.17
-// This gets squared/powered to penalize low completeness more
 function calculateResumeCompleteness(resume) {
   let filledSections = 0;
   const totalSections = 6;
@@ -213,22 +204,18 @@ function calculateResumeCompleteness(resume) {
   return filledSections / totalSections;
 }
 
-// ── Core scoring function — returns 0-100 ──────────────────────────────────────
+// ── Core scoring function ────────────────────────────────────────────────────
 function scoreResumeAgainstJob(resume, job) {
   const jobProfile = buildJobKeywordProfile(job);
   const resumeProfile = buildResumeKeywordProfile(resume);
 
   const breakdown = {};
 
-  // ✅ Calculate penalty for sparse resume — if only 1/6 sections filled,
-  // all scores are multiplied by (1/6)^1.5 ≈ 0.11, so 40% becomes ~4%.
-  // This prevents empty resumes from matching at 40%+ just from defaults.
+  // Completeness penalty
   const completeness = calculateResumeCompleteness(resume);
   const sparsenessPenalty = Math.pow(completeness, 1.5);
 
-  // ── 1. Skill match against job's required tags (40% weight) ─────────────────
-  // This is the single highest-weighted factor in real ATS systems —
-  // recruiters configure "must-have" and "nice-to-have" skill lists.
+  // ── 1. Skill match (40% weight) ──────────────────────────────────────────
   const allResumeTerms = new Set([
     ...resumeProfile.skills,
     ...resumeProfile.expTitle,
@@ -238,42 +225,39 @@ function scoreResumeAgainstJob(resume, job) {
 
   const tagMatches = setOverlap(jobProfile.tags, allResumeTerms);
   const tagScore =
-    jobProfile.tags.size > 0 ? (tagMatches / jobProfile.tags.size) * 40 : 5; // ✅ FIXED: was 20, now 5 (neutral)
+    jobProfile.tags.size > 0 ? (tagMatches / jobProfile.tags.size) * 40 : 5;
   breakdown.skillMatch = Math.round(tagScore * sparsenessPenalty);
 
-  // ── 2. Title/role relevance (20% weight) ─────────────────────────────────────
-  // Compares job title keywords against resume's past job titles —
-  // mirrors "title matching" used by Workday/Taleo for role-fit scoring.
+  // ── 2. Title match (20% weight) ──────────────────────────────────────────
   const titleMatches = setOverlap(jobProfile.title, resumeProfile.expTitle);
   const titleScore =
     jobProfile.title.size > 0
       ? Math.min((titleMatches / jobProfile.title.size) * 20, 20)
-      : 2; // ✅ FIXED: was 10, now 2 (neutral)
+      : 2;
   breakdown.titleMatch = Math.round(titleScore * sparsenessPenalty);
 
-  // ── 3. Description keyword density (15% weight) ──────────────────────────────
-  // Broader text-similarity signal, similar to how ATS full-text indexes work.
+  // ── 3. Content match (15% weight) ────────────────────────────────────────
   const descMatches = setOverlap(jobProfile.desc, allResumeTerms);
   const descScore =
     jobProfile.desc.size > 0
       ? Math.min((descMatches / jobProfile.desc.size) * 15, 15)
-      : 0; // ✅ FIXED: was 7, now 0 (neutral — no content, no points)
+      : 0;
   breakdown.contentMatch = Math.round(descScore * sparsenessPenalty);
 
-  // ── 4. Experience level fit (15% weight) ──────────────────────────────────────
+  // ── 4. Experience level (15% weight) ─────────────────────────────────────
   const resumeYears = totalYearsExperience(resume);
   const requiredYears = inferRequiredYears(job);
   let expScore;
   if (resumeYears >= requiredYears) {
-    expScore = 15; // meets or exceeds requirement
+    expScore = 15;
   } else if (resumeYears >= requiredYears - 1) {
-    expScore = 10; // close enough — common ATS tolerance
+    expScore = 10;
   } else {
     expScore = Math.max(0, 15 - (requiredYears - resumeYears) * 4);
   }
   breakdown.experienceLevelMatch = Math.round(expScore * sparsenessPenalty);
 
-  // ── 5. Location compatibility (10% weight) ────────────────────────────────────
+  // ── 5. Location match (10% weight) ───────────────────────────────────────
   const resumeCity = (resume.personalInfo?.city ?? "").toLowerCase();
   const jobArea = (job.area ?? job.location ?? "").toLowerCase();
   const isRemote = job.isRemote || /remote/i.test(job.jobType ?? "");
@@ -294,7 +278,7 @@ function scoreResumeAgainstJob(resume, job) {
         breakdown.experienceLevelMatch +
         breakdown.locationMatch,
     ),
-    99, // cap at 99 — 100% match feels untrustworthy to users, same as real ATS UX
+    99,
   );
 
   return {
@@ -304,17 +288,14 @@ function scoreResumeAgainstJob(resume, job) {
     missingSkills: [...jobProfile.tags].filter((t) => !allResumeTerms.has(t)),
     resumeYears,
     requiredYears,
-    completeness, // ✅ NEW: expose completeness for debugging
+    completeness,
   };
 }
 
-// ── Score a resume against ALL jobs in the DB, return ranked list ─────────────
+// ── Score resume against all jobs ────────────────────────────────────────────
 async function matchResumeToJobs(resume, JobModel, options = {}) {
   const { limit = 10, minScore = 0 } = options;
 
-  // Pull a reasonable pool — in production with 10k+ jobs you'd pre-filter
-  // by category/location in the DB query before scoring, to avoid scoring
-  // every single job on every request.
   const candidateJobs = await JobModel.find({
     isActive: true,
     expiresAt: { $gte: new Date() },
@@ -356,5 +337,5 @@ module.exports = {
   matchResumeToJobs,
   extractKeywords,
   totalYearsExperience,
-  calculateResumeCompleteness, // ✅ Export for testing/debugging
+  calculateResumeCompleteness,
 };

@@ -105,4 +105,6 @@ export interface JobMatch {
   salaryMin: number;
   salaryMax: number;
   area: string;
+  matchedSkills: string[];
+  missingSkills: string[];
 }

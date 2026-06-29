@@ -616,4 +616,95 @@ router.put("/source", requireAuth, async (req, res) => {
   }
 });
 
+// ════════════════════════════════════════════════════════════════════════════
+// POST /api/resume/skill-gap — AI Skill Gap Analysis via Gemini
+// ════════════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════════════════
+// POST /api/resume/skill-gap — AI Skill Gap Analysis via Gemini
+// ✅ FIXED: Use gemini-2.0-flash (faster, more available)
+// ════════════════════════════════════════════════════════════════════════════
+const { GoogleGenerativeAI } = require("@google/generative-ai");
+
+router.post("/skill-gap", requireAuth, async (req, res) => {
+  const {
+    currentSkills = [],
+    missingSkills = [],
+    topJobTitles = [],
+  } = req.body;
+
+  if (!process.env.GEMINI_API_KEY) {
+    return res
+      .status(503)
+      .json({ error: "Gemini API key not configured on server." });
+  }
+  if (missingSkills.length === 0) {
+    return res.json({ suggestions: [] });
+  }
+
+  try {
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+
+    // ✅ FIXED: Use gemini-2.0-flash (faster, more reliable)
+    // gemini-2.5-flash-lite is often overloaded (503 errors)
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
+
+    const prompt = `You are a career advisor for tech jobs in Karachi, Pakistan.
+The candidate has these skills: ${currentSkills.join(", ") || "none listed yet"}
+They are matched to these roles: ${topJobTitles.slice(0, 5).join(", ")}
+Jobs require these skills they lack: ${[...new Set(missingSkills)].join(", ")}
+
+Pick TOP 5 most impactful missing skills for Karachi's tech market.
+Return ONLY a valid JSON array, no markdown, no extra text:
+[{"name":"skill name","reason":"one sentence why it matters for Karachi","impact":8}]`;
+
+    const result = await model.generateContent({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: { temperature: 0.2, maxOutputTokens: 800 },
+    });
+
+    const rawText = result.response.text();
+    console.log("Gemini raw response:", rawText);
+
+    const clean = rawText
+      .replace(/```json\s*/gi, "")
+      .replace(/```\s*/gi, "")
+      .trim();
+
+    let suggestions;
+    try {
+      suggestions = JSON.parse(clean);
+    } catch (parseErr) {
+      console.error("JSON parse error:", parseErr.message);
+      console.error("Attempted to parse:", clean);
+      return res.status(502).json({
+        error: "Gemini returned unexpected format.",
+        debug: clean.slice(0, 200),
+      });
+    }
+
+    const safe = suggestions
+      .filter((s) => s && s.name && s.reason)
+      .map((s) => ({
+        name: String(s.name).slice(0, 40).trim(),
+        reason: String(s.reason).slice(0, 120).trim(),
+        impact: Math.min(Math.max(Number(s.impact) || 5, 1), 15),
+      }))
+      .slice(0, 5);
+
+    res.json({ suggestions: safe });
+  } catch (err) {
+    console.error("POST /api/resume/skill-gap error:", err.message);
+
+    // Return 503 if Gemini is overloaded, so frontend can retry
+    if (err.message?.includes("503") || err.message?.includes("overloaded")) {
+      return res.status(503).json({
+        error:
+          "Gemini service temporarily unavailable. Please try again in a moment.",
+      });
+    }
+
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

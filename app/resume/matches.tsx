@@ -1,10 +1,14 @@
 // app/resume/matches.tsx — "Resume Complete! Jobs Recommended" Screen
+// ✅ NEW: Gemini AI Skill Gap card — aggregates missingSkills from all matched
+//         jobs, calls Gemini to prioritise and explain them, shows one-tap add.
 import ThemeToggle from "@/components/ThemeToggle";
 import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Alert,
+  Animated,
   ScrollView,
   StyleSheet,
   Text,
@@ -12,33 +16,198 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { API_BASE_URL, STORAGE_KEYS, TIMEOUT_MS } from "../../constants/API";
 import { useTheme } from "../../context/ThemeContext";
-import { fetchMatchedJobs } from "../../services/resumeService";
-import { JobMatch } from "../../types/resume";
+import {
+  addSkill,
+  fetchMatchedJobs,
+  fetchResume,
+} from "../../services/resumeService";
+import { JobMatch, Skill } from "../../types/resume";
 
+// ── Gemini skill-gap analysis ─────────────────────────────────────────────────
+// Called once after matches load. Sends the user's current skills + the
+// aggregated missing skills from matched jobs to Gemini and asks it to:
+//   1. Pick the top 5 most impactful missing skills
+//   2. Write a one-sentence personalised reason for each
+//   3. Estimate impact on match score
+// Returns ONLY JSON so we can parse it safely.
+//
+// Calls the backend POST /api/resume/skill-gap which proxies to Gemini —
+// we never put the Gemini API key in the frontend bundle.
+console.log("Calling skill-gap URL:", `${API_BASE_URL}/resume/skill-gap`);
+async function analyseSkillGap(
+  currentSkills: string[],
+  missingSkills: string[],
+  topJobTitles: string[],
+): Promise<SkillSuggestion[]> {
+  const token = await AsyncStorage.getItem(STORAGE_KEYS.AUTH_TOKEN);
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/resume/skill-gap`, {
+      method: "POST",
+      headers,
+      signal: controller.signal,
+      body: JSON.stringify({ currentSkills, missingSkills, topJobTitles }),
+    });
+    clearTimeout(timer);
+    const text = await response.text();
+
+    console.log("Skill Gap Raw:", text);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = JSON.parse(text);
+
+    console.log("Skill Gap API Response:", data);
+    // Backend returns { suggestions: [...] }
+    return data.suggestions as SkillSuggestion[];
+  } catch (err: any) {
+    clearTimeout(timer);
+    throw err;
+  }
+}
+
+interface SkillSuggestion {
+  name: string;
+  reason: string;
+  impact: number;
+}
+
+// ── Component ─────────────────────────────────────────────────────────────────
 export default function MatchesScreen() {
   const { colors } = useTheme();
   const [matches, setMatches] = useState<JobMatch[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Skill gap state
+  const [currentSkills, setCurrentSkills] = useState<string[]>([]);
+  const [suggestions, setSuggestions] = useState<SkillSuggestion[]>([]);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState(false);
+  const [addedSkills, setAddedSkills] = useState<Set<string>>(new Set());
+  const [addingSkill, setAddingSkill] = useState<string | null>(null);
+
+  // Shimmer animation for loading state
+  const shimmer = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    fetchMatchedJobs()
-      .then(setMatches)
+    if (aiLoading) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(shimmer, {
+            toValue: 1,
+            duration: 900,
+            useNativeDriver: true,
+          }),
+          Animated.timing(shimmer, {
+            toValue: 0,
+            duration: 900,
+            useNativeDriver: true,
+          }),
+        ]),
+      ).start();
+    } else {
+      shimmer.stopAnimation();
+      shimmer.setValue(0);
+    }
+  }, [aiLoading]);
+
+  useEffect(() => {
+    // Load matches + current skills in parallel
+    Promise.all([fetchMatchedJobs(), fetchResume()])
+      .then(([jobMatches, resume]) => {
+        setMatches(jobMatches);
+        console.log("First match missingSkills:", matches[0]?.missingSkills);
+        console.log("First match matchedSkills:", matches[0]?.matchedSkills);
+        const skills = (resume.skills ?? []).map((s: Skill) => s.name);
+        setCurrentSkills(skills);
+
+        // Only run Gemini analysis if there are matches to draw from
+        if (jobMatches.length > 0) {
+          runSkillAnalysis(jobMatches, skills);
+        }
+      })
       .catch((e) => Alert.alert("Error", e.message))
       .finally(() => setLoading(false));
   }, []);
 
-  const topSkills = matches.length > 0 ? "React and UX Design" : "your skills"; // could derive from resume
+  async function runSkillAnalysis(jobMatches: JobMatch[], skills: string[]) {
+    setAiLoading(true);
+    setAiError(false);
+    try {
+      // Aggregate all missingSkills across every matched job, weighted by
+      // match score so high-relevance jobs contribute more signal.
+      const missingMap: Record<string, number> = {};
+      for (const job of jobMatches) {
+        const weight = job.matchPercent / 100;
+        for (const skill of job.missingSkills ?? []) {
+          missingMap[skill] = (missingMap[skill] ?? 0) + weight;
+        }
+      }
+      // Sort by weighted frequency descending
+      const aggregatedMissing = Object.entries(missingMap)
+        .sort((a, b) => b[1] - a[1])
+        .map(([skill]) => skill)
+        .slice(0, 15); // send top 15 to Gemini for it to filter to 5
+
+      const topTitles = jobMatches.slice(0, 5).map((j) => j.title);
+      const result = await analyseSkillGap(
+        skills,
+        aggregatedMissing,
+        topTitles,
+      );
+      console.log("Job Matches:", jobMatches);
+      console.log("Aggregated Missing:", aggregatedMissing);
+      console.log("Gemini Suggestions:", result);
+      setSuggestions(result);
+    } catch (e: any) {
+      console.error("Skill gap error:", e?.message ?? e);
+      setAiError(true);
+    } finally {
+      setAiLoading(false);
+    }
+  }
+
+  async function handleAddSkill(skillName: string) {
+    if (addedSkills.has(skillName) || addingSkill === skillName) return;
+    setAddingSkill(skillName);
+    try {
+      await addSkill(skillName, "technical");
+      setAddedSkills((prev) => new Set([...prev, skillName]));
+      setCurrentSkills((prev) => [...prev, skillName]);
+    } catch (e: any) {
+      // "Skill already added" from server is fine — just mark it
+      if (e.message?.includes("already")) {
+        setAddedSkills((prev) => new Set([...prev, skillName]));
+      } else {
+        Alert.alert("Couldn't add skill", e.message);
+      }
+    } finally {
+      setAddingSkill(null);
+    }
+  }
+
+  const topSkills =
+    currentSkills.length > 0
+      ? currentSkills.slice(0, 2).join(" and ")
+      : "your skills";
 
   const s = makeStyles(colors);
+  const shimmerOpacity = shimmer.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.4, 1],
+  });
 
   return (
     <SafeAreaView style={s.safe} edges={["top"]}>
       <View style={s.header}>
         <View style={[s.avatar, { backgroundColor: colors.brand }]}>
-          <Text style={{ color: "#fff" }}>
-            <Ionicons name="briefcase" size={20} color={colors.text} />
-          </Text>
+          <Ionicons name="briefcase" size={20} color="#fff" />
         </View>
         <Text style={[s.headerTitle, { color: colors.textPrimary }]}>
           KarachiJobs
@@ -61,6 +230,162 @@ export default function MatchesScreen() {
           in Karachi.
         </Text>
 
+        {/* ── AI Skill Gap Card ─────────────────────────────────────────────
+            Shown whenever there are matched jobs to draw signal from.
+            Loading state uses a shimmer pulse so it feels alive, not frozen. */}
+        {(aiLoading || suggestions.length > 0 || aiError) && (
+          <View
+            style={[
+              s.aiCard,
+              { backgroundColor: colors.bgCard, borderColor: colors.border },
+            ]}
+          >
+            {/* Card header */}
+            <View style={s.aiCardHeader}>
+              <View
+                style={[s.aiIconBox, { backgroundColor: colors.brandLight }]}
+              >
+                <Text style={{ fontSize: 16 }}>✨</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[s.aiCardTitle, { color: colors.textPrimary }]}>
+                  AI Skill Gap Analysis
+                </Text>
+                <Text style={[s.aiCardSub, { color: colors.textSecondary }]}>
+                  Based on your {matches.length} matched jobs
+                </Text>
+              </View>
+              {aiLoading && (
+                <Text style={[s.aiLoadingLabel, { color: colors.brand }]}>
+                  Analysing…
+                </Text>
+              )}
+            </View>
+
+            {/* Loading shimmer rows */}
+            {aiLoading && (
+              <Animated.View style={{ opacity: shimmerOpacity }}>
+                {[1, 2, 3].map((i) => (
+                  <View
+                    key={i}
+                    style={[
+                      s.shimmerRow,
+                      { backgroundColor: colors.bgTertiary },
+                    ]}
+                  />
+                ))}
+              </Animated.View>
+            )}
+
+            {/* Error state */}
+            {aiError && !aiLoading && (
+              <View style={s.aiErrorRow}>
+                <Text style={[s.aiErrorText, { color: colors.textSecondary }]}>
+                  Couldn't load AI analysis.
+                </Text>
+                <TouchableOpacity
+                  onPress={() => runSkillAnalysis(matches, currentSkills)}
+                >
+                  <Text style={[s.aiRetry, { color: colors.brand }]}>
+                    Retry
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* Skill suggestions */}
+            {!aiLoading &&
+              !aiError &&
+              suggestions.map((sug, idx) => {
+                const isAdded = addedSkills.has(sug.name);
+                const isAdding = addingSkill === sug.name;
+                return (
+                  <View
+                    key={idx}
+                    style={[
+                      s.sugRow,
+                      idx < suggestions.length - 1 && {
+                        borderBottomWidth: 1,
+                        borderBottomColor: colors.border,
+                      },
+                    ]}
+                  >
+                    {/* Left: skill info */}
+                    <View style={{ flex: 1 }}>
+                      <View style={s.sugNameRow}>
+                        <Text
+                          style={[s.sugName, { color: colors.textPrimary }]}
+                        >
+                          {sug.name}
+                        </Text>
+                        {/* Impact badge */}
+                        <View
+                          style={[
+                            s.impactBadge,
+                            { backgroundColor: colors.brandLight },
+                          ]}
+                        >
+                          <Text style={[s.impactText, { color: colors.brand }]}>
+                            +{sug.impact}% match
+                          </Text>
+                        </View>
+                      </View>
+                      <Text
+                        style={[s.sugReason, { color: colors.textSecondary }]}
+                        numberOfLines={2}
+                      >
+                        {sug.reason}
+                      </Text>
+                    </View>
+
+                    {/* Right: add button */}
+                    <TouchableOpacity
+                      style={[
+                        s.addBtn,
+                        isAdded
+                          ? { backgroundColor: colors.success + "22" }
+                          : { backgroundColor: colors.brandLight },
+                      ]}
+                      onPress={() => handleAddSkill(sug.name)}
+                      disabled={isAdded || isAdding}
+                      activeOpacity={0.75}
+                    >
+                      {isAdding ? (
+                        <Text style={[s.addBtnText, { color: colors.brand }]}>
+                          …
+                        </Text>
+                      ) : isAdded ? (
+                        <Ionicons
+                          name="checkmark"
+                          size={16}
+                          color={colors.success}
+                        />
+                      ) : (
+                        <Text style={[s.addBtnText, { color: colors.brand }]}>
+                          + Add
+                        </Text>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                );
+              })}
+
+            {/* Footer CTA — only shown once at least one skill is added */}
+            {addedSkills.size > 0 && (
+              <TouchableOpacity
+                style={[s.aiFooterBtn, { backgroundColor: colors.brandDark }]}
+                onPress={() => router.push("/resume/skills" as any)}
+              >
+                <Text style={s.aiFooterBtnText}>
+                  ✓ {addedSkills.size} skill
+                  {addedSkills.size > 1 ? "s" : ""} added — View Skills →
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+
+        {/* ── Job list ────────────────────────────────────────────────────── */}
         <View style={s.sectionHeader}>
           <Text style={[s.sectionTitle, { color: colors.textPrimary }]}>
             Jobs Recommended For You
@@ -193,7 +518,87 @@ const makeStyles = (c: any) =>
     },
     completeIcon: { fontSize: 22 },
     completeTitle: { fontSize: 21, fontWeight: "700" },
-    completeSub: { fontSize: 13, lineHeight: 20, marginBottom: 22 },
+    completeSub: { fontSize: 13, lineHeight: 20, marginBottom: 20 },
+
+    // ── AI Skill Gap card ──────────────────────────────────────────────────
+    aiCard: {
+      borderWidth: 1,
+      borderRadius: 18,
+      padding: 16,
+      marginBottom: 24,
+    },
+    aiCardHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      marginBottom: 14,
+    },
+    aiIconBox: {
+      width: 36,
+      height: 36,
+      borderRadius: 10,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    aiCardTitle: { fontSize: 15, fontWeight: "700" },
+    aiCardSub: { fontSize: 12, marginTop: 1 },
+    aiLoadingLabel: { fontSize: 11, fontWeight: "600" },
+    shimmerRow: {
+      height: 48,
+      borderRadius: 10,
+      marginBottom: 8,
+    },
+    aiErrorRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      paddingVertical: 8,
+    },
+    aiErrorText: { fontSize: 13, flex: 1 },
+    aiRetry: { fontSize: 13, fontWeight: "700" },
+
+    // Each suggested skill row
+    sugRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      paddingVertical: 12,
+    },
+    sugNameRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      marginBottom: 3,
+      flexWrap: "wrap",
+    },
+    sugName: { fontSize: 14, fontWeight: "700" },
+    impactBadge: {
+      borderRadius: 6,
+      paddingHorizontal: 7,
+      paddingVertical: 2,
+    },
+    impactText: { fontSize: 10, fontWeight: "700" },
+    sugReason: { fontSize: 12, lineHeight: 17 },
+    addBtn: {
+      borderRadius: 10,
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      minWidth: 62,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    addBtnText: { fontSize: 13, fontWeight: "700" },
+
+    // Footer CTA after skills are added
+    aiFooterBtn: {
+      borderRadius: 12,
+      paddingVertical: 12,
+      alignItems: "center",
+      marginTop: 12,
+    },
+    aiFooterBtnText: { color: "#fff", fontSize: 13, fontWeight: "700" },
+
+    // ── Job list ───────────────────────────────────────────────────────────
     sectionHeader: {
       flexDirection: "row",
       justifyContent: "space-between",

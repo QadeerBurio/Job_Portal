@@ -9,7 +9,9 @@ Latest jobs
 */
 router.get("/", async (req, res) => {
   try {
-    const jobs = await Job.find().sort({ postedAt: -1 }).limit(100);
+    const jobs = await Job.find({ isActive: true })
+      .sort({ postedAt: -1 })
+      .limit(100);
 
     res.json(jobs);
   } catch (error) {
@@ -28,6 +30,7 @@ router.get("/search", async (req, res) => {
     const keyword = req.query.keyword || "";
 
     const jobs = await Job.find({
+      isActive: true,
       $or: [
         {
           title: {
@@ -59,6 +62,7 @@ GET /jobs/internships
 router.get("/internships", async (req, res) => {
   try {
     const jobs = await Job.find({
+      isActive: true,
       isInternship: true,
     }).sort({
       postedAt: -1,
@@ -79,6 +83,7 @@ GET /jobs/remote
 router.get("/remote", async (req, res) => {
   try {
     const jobs = await Job.find({
+      isActive: true,
       isRemote: true,
     }).sort({
       postedAt: -1,
@@ -99,6 +104,7 @@ GET /jobs/category/Finance
 router.get("/category/:category", async (req, res) => {
   try {
     const jobs = await Job.find({
+      isActive: true,
       category: req.params.category,
     });
 

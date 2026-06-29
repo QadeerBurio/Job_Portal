@@ -19,7 +19,8 @@
     "mongoose": "^8.24.0",
     "multer": "^2.2.0",
     "node-cron": "^4.2.1",
-    "pdf-parse": "^2.4.5"
+    "pdf-parse": "^2.4.5",
+    "react-native-dotenv": "^3.4.11"
   },
   "devDependencies": {
     "nodemon": "^3.0.0"
